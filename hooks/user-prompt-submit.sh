@@ -14,7 +14,7 @@ command -v batuta >/dev/null 2>&1 || exit 0
 
 # 300ms is the hard ceiling. If the machine is on its knees, better to stay quiet.
 if command -v timeout >/dev/null 2>&1; then
-  timeout 3 batuta route --stdin-json --mode hook 2>/dev/null || exit 0
+  timeout 0.3 batuta route --stdin-json --mode hook 2>/dev/null || exit 0
 else
   batuta route --stdin-json --mode hook 2>/dev/null || exit 0
 fi

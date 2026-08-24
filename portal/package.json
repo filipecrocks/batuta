@@ -2,23 +2,27 @@
   "name": "batuta-portal",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Batuta's portal — rankings, recipes, arena and the record chain.",
   "license": "MIT",
   "scripts": {
     "prebuild": "node ../script/sync-content.mjs",
     "dev": "node ../script/sync-content.mjs && next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --experimental-strip-types --test lib/*.test.mjs ../adapters/lab/*.test.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.4",
-    "next": "^15.1.6",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "@neondatabase/serverless": "0.10.4",
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@types/node": "^22.10.7",
-    "@types/react": "^19.0.7",
-    "typescript": "^5.7.3"
-  }
+    "@types/node": "22.20.1",
+    "@types/react": "19.2.18",
+    "typescript": "5.9.3"
+  },
+  "packageManager": "npm@11.13.0"
 }

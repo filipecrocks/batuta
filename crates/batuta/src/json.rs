@@ -4,6 +4,8 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
+const MAX_JSON_DEPTH: usize = 64;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Null,
@@ -111,7 +113,7 @@ fn write_into(v: &Value, s: &mut String) {
 pub fn read(input: &str) -> Result<Value, String> {
     let b: Vec<char> = input.chars().collect();
     let mut i = 0usize;
-    let v = parse_value(&b, &mut i)?;
+    let v = parse_value(&b, &mut i, 0)?;
     skip_ws(&b, &mut i);
     if i < b.len() {
         return Err(format!(
@@ -128,7 +130,10 @@ fn skip_ws(b: &[char], i: &mut usize) {
     }
 }
 
-fn parse_value(b: &[char], i: &mut usize) -> Result<Value, String> {
+fn parse_value(b: &[char], i: &mut usize, depth: usize) -> Result<Value, String> {
+    if depth > MAX_JSON_DEPTH {
+        return Err(format!("JSON exceeds maximum depth of {MAX_JSON_DEPTH}"));
+    }
     skip_ws(b, i);
     if *i >= b.len() {
         return Err("empty JSON".into());
@@ -144,7 +149,7 @@ fn parse_value(b: &[char], i: &mut usize) -> Result<Value, String> {
             }
             loop {
                 skip_ws(b, i);
-                let k = match parse_value(b, i)? {
+                let k = match parse_value(b, i, depth + 1)? {
                     Value::Text(s) => s,
                     _ => return Err("object key must be a string".into()),
                 };
@@ -153,7 +158,7 @@ fn parse_value(b: &[char], i: &mut usize) -> Result<Value, String> {
                     return Err("missing ':' in object".into());
                 }
                 *i += 1;
-                let v = parse_value(b, i)?;
+                let v = parse_value(b, i, depth + 1)?;
                 m.insert(k, v);
                 skip_ws(b, i);
                 if *i >= b.len() {
@@ -179,7 +184,7 @@ fn parse_value(b: &[char], i: &mut usize) -> Result<Value, String> {
                 return Ok(Value::List(l));
             }
             loop {
-                l.push(parse_value(b, i)?);
+                l.push(parse_value(b, i, depth + 1)?);
                 skip_ws(b, i);
                 if *i >= b.len() {
                     return Err("unterminated list".into());
@@ -244,6 +249,9 @@ fn parse_value(b: &[char], i: &mut usize) -> Result<Value, String> {
                             other => s.push(other),
                         }
                     }
+                    c if (c as u32) < 0x20 => {
+                        return Err("unescaped control character in string".into())
+                    }
                     c => s.push(c),
                 }
             }
@@ -277,9 +285,14 @@ fn parse_value(b: &[char], i: &mut usize) -> Result<Value, String> {
                 *i += 1;
             }
             let s: String = b[start..*i].iter().collect();
-            s.parse::<f64>()
-                .map(Value::Num)
-                .map_err(|_| format!("invalid number: {}", s))
+            let number = s
+                .parse::<f64>()
+                .map_err(|_| format!("invalid number: {s}"))?;
+            if number.is_finite() {
+                Ok(Value::Num(number))
+            } else {
+                Err(format!("non-finite number: {s}"))
+            }
         }
     }
 }

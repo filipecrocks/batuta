@@ -1,75 +1,58 @@
 # Install Batuta
 
-Three paths. Pick one.
-
-## 1. curl (the shortest)
+## Checksum-verified release (Linux and macOS)
 
 ```sh
-curl -fsSL https://batuta.space/instalar.sh | sh
+curl -fsSL https://batuta.space/install.sh | sh
 ```
 
-Pin the version: `BATUTA_VERSAO=v0.1.0 curl -fsSL https://batuta.space/instalar.sh | sh`
-Choose the folder: `BATUTA_DESTINO=/opt/bin curl -fsSL ... | sh`
+Pin a version with `BATUTA_VERSION=v0.1.0`; choose a destination with
+`BATUTA_DEST=/opt/bin`. The installer downloads the matching GitHub release,
+verifies it against that release's `SHA256SUMS`, and only then performs the final
+write. The release workflow builds static musl binaries for Linux and publishes
+checksums and GitHub build-provenance attestations for every archive.
 
-**Lands at:** `/usr/local/bin/batuta` if you have permission, otherwise `$HOME/.local/bin/batuta`.
-A single file. The script checks the SHA256 against the release's `SHA256SUMS` — if it doesn't match, it deletes the download and installs nothing.
+On Windows, download the matching `.zip` and `SHA256SUMS` from the GitHub release,
+verify it with `Get-FileHash -Algorithm SHA256`, then place `batuta.exe` on `PATH`.
 
-Linux and macOS, x86_64 and aarch64. On Windows, use npm.
+## npm status — do not use the unscoped package
 
-## 2. npm
+The npm package named `batuta` is unrelated to this project. Do **not** run
+`npm install -g batuta`. The wrapper in `npm/` is named
+`@filipecrocks/batuta` and is deliberately marked private until that scope has a
+verified, provenance-bearing release. This document will only advertise npm
+after the exact package is published and its ownership is verified.
 
-```sh
-npm install -g batuta
-```
-
-**Lands at:** the binary at `<npm-prefix>/lib/node_modules/batuta/vendor/batuta` (`.exe` on Windows) and a `batuta` shortcut in npm's bin. `postinstall` downloads from the release matching the package's version and checks the SHA256 — if that fails, the install fails too.
-
-This is the only path that has `batuta registro atualizar`, which downloads the public skills registry. It lives in the JS wrapper because **the Rust binary doesn't touch the network, by project rule**.
-
-## 3. cargo (building on your machine)
+## Build from source
 
 ```sh
 git clone https://github.com/filipecrocks/batuta
-cargo install --path batuta/crates/batuta
+cargo install --locked --path batuta/crates/batuta
 ```
 
-**Lands at:** `$HOME/.cargo/bin/batuta`. No binary download, no SHA to check — you compiled what you read.
+This installs `$HOME/.cargo/bin/batuta`. The repository pins Rust in
+`rust-toolchain.toml` and the crate has no third-party Rust dependencies.
 
-## Verify it worked
+## Verify and configure
 
 ```sh
-batuta version      # batuta 0.1.0
-batuta index        # should say how many skills it found
-batuta report       # the number, 100% offline
+batuta version
+batuta index
+batuta install-hooks
+batuta report
+batuta privacy
 ```
 
-If `batuta: command not found`, the folder isn't on your `PATH`:
+The installer does not enable upload. Local state is stored in `BATUTA_HOME` or
+`$HOME/.batuta`; the legacy `BATUTA_CASA` variable remains supported during the
+v0.x compatibility window. Directories are owner-only and state files are
+written atomically with owner-only permissions.
 
-```sh
-export PATH="$HOME/.local/bin:$PATH"   # or $HOME/.cargo/bin
-```
+The network-capable registry wrapper remains separate from the Rust binary:
+`batuta registry update` downloads only the public skill registry. The legacy
+`batuta registro atualizar` spelling remains an alias and emits a deprecation
+warning.
 
-## The next 3 steps
-
-```sh
-batuta index           # scans your skills and builds the local index
-batuta install-hooks   # installs the UserPromptSubmit hook
-batuta report          # funnel, ghost skill, cost per task, lift
-```
-
-## Uninstall
-
-| How you installed | How you leave |
-|---|---|
-| curl | `rm $(command -v batuta)` |
-| npm | `npm uninstall -g batuta` |
-| cargo | `cargo uninstall batuta` |
-
-And the data, which is yours alone and never left here:
-
-```sh
-rm -rf ~/.batuta
-```
-
-This deletes the index, events, config, and the salt. Before deleting, `batuta privacidade` shows you exactly what's in there.
-If you installed the hook, also remove the `UserPromptSubmit` block from your `~/.claude/settings.json`.
+To uninstall a Cargo build, run `cargo uninstall batuta`. Remove local data only
+after inspecting it with `batuta privacy`; deleting `$HOME/.batuta` also removes
+the local salt and cannot be undone.

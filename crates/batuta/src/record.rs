@@ -1,45 +1,44 @@
-//! Events and report.
+//! Private local events and privacy-preserving aggregate reports.
 //!
-//! GOLDEN RULE, and it matters more than any feature: the prompt text never
-//! enters this file. What enters is the hash with a local salt, the length, and
-//! the term count. Whoever steals events.jsonl reads nothing about anyone.
-//!
-//! What goes up to the portal, and only with opt-in, is the DAILY SUMMARY AGGREGATED
-//! BY SKILL — never the raw event. 200 turns a day become ~20 lines.
+//! Raw prompts, responses, paths, credentials, and session identifiers never enter
+//! this module. Local events are observations on a user-controlled filesystem; they
+//! are not trusted delivery receipts and therefore cannot attest successful outcomes.
 
 use crate::data;
 use crate::home;
 use crate::json::{self, number, object, text, Value};
+use crate::storage;
 use std::collections::BTreeMap;
-use std::fs::OpenOptions;
-use std::io::Write;
+use std::io;
+use std::path::PathBuf;
 
-pub fn events_file() -> std::path::PathBuf {
-    home::ensure_dir().join("events.jsonl")
+pub fn events_file() -> PathBuf {
+    home::app_dir().join("events.jsonl")
 }
 
-pub fn append(v: &Value) {
-    let line = json::write(v);
-    if let Ok(mut f) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(events_file())
-    {
-        let _ = writeln!(f, "{}", line);
-    }
+pub fn append(value: &Value) -> io::Result<()> {
+    storage::append_line(&events_file(), json::write(value).as_bytes())
 }
 
 pub fn load() -> Vec<Value> {
-    let Ok(s) = std::fs::read_to_string(events_file()) else {
-        return Vec::new();
-    };
-    s.lines()
-        .filter(|l| !l.trim().is_empty())
-        .filter_map(|l| json::read(l).ok())
-        .collect()
+    let mut events = Vec::new();
+    // Preserve data written by v0 Portuguese builds during an in-place upgrade.
+    for path in [
+        home::app_dir().join("eventos.jsonl"),
+        home::app_dir().join("events.jsonl"),
+    ] {
+        let Ok(contents) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        events.extend(
+            contents
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .filter_map(|line| json::read(line).ok()),
+        );
+    }
+    events
 }
-
-// ------------------------------------------------------------------- aggregation
 
 #[derive(Default, Debug, Clone)]
 pub struct BySkill {
@@ -64,9 +63,7 @@ pub struct Aggregate {
     pub routes_suggested: u64,
     pub routes_holdout: u64,
     pub skills: BTreeMap<String, BySkill>,
-    /// outcome of the turns in which the router SPOKE
     pub suggested_arm: (u64, u64),
-    /// outcome of the holdout turns — the router deliberately stayed silent
     pub holdout_arm: (u64, u64),
     pub ms_total: f64,
     pub ms_samples: u64,
@@ -74,302 +71,225 @@ pub struct Aggregate {
     pub last: u64,
 }
 
+fn field_text<'a>(event: &'a Value, canonical: &str, legacy: &str) -> &'a str {
+    let value = event.field(canonical).text();
+    if value.is_empty() {
+        event.field(legacy).text()
+    } else {
+        value
+    }
+}
+
+fn event_type(event: &Value) -> &str {
+    field_text(event, "type", "tipo")
+}
+
+fn turn_id(event: &Value) -> &str {
+    let canonical = event.field("turn_id").text();
+    if !canonical.is_empty() {
+        canonical
+    } else {
+        field_text(event, "turn", "turno")
+    }
+}
+
+fn suggestions(event: &Value) -> &[Value] {
+    let canonical = event.field("suggestions").items();
+    if canonical.is_empty() {
+        event.field("sugestoes").items()
+    } else {
+        canonical
+    }
+}
+
+/// Local JSONL is editable by its owner and cannot independently establish a
+/// successful outcome. Only the authenticated LAB ingest path verifies signed
+/// receipts from a trusted runner and may include results in success metrics.
+fn authoritative_outcome(_event: &Value) -> bool {
+    false
+}
+
 pub fn aggregate(events: &[Value], day: Option<&str>) -> Aggregate {
-    let mut ag = Aggregate::default();
-    // turn -> (holdout, spoke, suggested skills)
+    let mut aggregate = Aggregate::default();
     let mut turns: BTreeMap<String, (bool, bool, Vec<String>)> = BTreeMap::new();
-
-    for e in events {
-        let t = e.field("t").number() as u64;
-        if let Some(d) = day {
-            if data::day_utc(t) != d {
-                continue;
-            }
+    for event in events {
+        let timestamp = event.field("t").number() as u64;
+        if day.is_some_and(|expected| data::day_utc(timestamp) != expected) {
+            continue;
         }
-        if ag.first == 0 || t < ag.first {
-            ag.first = t;
+        if aggregate.first == 0 || timestamp < aggregate.first {
+            aggregate.first = timestamp;
         }
-        if t > ag.last {
-            ag.last = t;
-        }
-        let turn = e.field("turn").text().to_string();
-
-        match e.field("type").text() {
-            "route" => {
-                ag.routes += 1;
-                let holdout = matches!(e.field("holdout"), Value::Bool(true));
+        aggregate.last = aggregate.last.max(timestamp);
+        match event_type(event) {
+            "route" | "rota" => {
+                aggregate.routes += 1;
+                let holdout = matches!(event.field("holdout"), Value::Bool(true));
                 if holdout {
-                    ag.routes_holdout += 1;
+                    aggregate.routes_holdout += 1;
                 }
-                let suggested: Vec<String> = e
-                    .field("suggestions")
-                    .items()
+                let suggested: Vec<String> = suggestions(event)
                     .iter()
-                    .map(|s| s.field("skill").text().to_string())
+                    .filter_map(|entry| {
+                        let skill = field_text(entry, "skill", "habilidade");
+                        (!skill.is_empty()).then(|| skill.to_string())
+                    })
                     .collect();
                 let spoke = !suggested.is_empty();
                 if spoke {
-                    ag.routes_suggested += 1;
+                    aggregate.routes_suggested += 1;
                 }
-                for s in &suggested {
-                    let target = ag.skills.entry(s.clone()).or_default();
+                for suggestion in suggestions(event) {
+                    let skill = field_text(suggestion, "skill", "habilidade");
+                    if skill.is_empty() {
+                        continue;
+                    }
+                    let target = aggregate.skills.entry(skill.to_string()).or_default();
                     target.routes += 1;
-                }
-                for s in e.field("suggestions").items() {
-                    let name = s.field("skill").text().to_string();
-                    let v = s.field("version").text().to_string();
-                    if !v.is_empty() {
-                        ag.skills.entry(name).or_default().version = v;
+                    let version = field_text(suggestion, "version", "versao");
+                    if !version.is_empty() {
+                        target.version = version.to_string();
                     }
                 }
-                let ms = e.field("ms").number();
-                if ms > 0.0 {
-                    ag.ms_total += ms;
-                    ag.ms_samples += 1;
+                let milliseconds = event.field("ms").number();
+                if milliseconds > 0.0 {
+                    aggregate.ms_total += milliseconds;
+                    aggregate.ms_samples += 1;
                 }
-                turns.insert(turn, (holdout, spoke, suggested));
+                let correlation = turn_id(event);
+                if !correlation.is_empty() {
+                    turns.insert(correlation.to_string(), (holdout, spoke, suggested));
+                }
             }
-            "activation" => {
-                let name = e.field("skill").text().to_string();
-                if name.is_empty() {
+            "activation" | "ativacao" => {
+                let skill = field_text(event, "skill", "habilidade");
+                if skill.is_empty() {
                     continue;
                 }
-                let target = ag.skills.entry(name).or_default();
+                let target = aggregate.skills.entry(skill.to_string()).or_default();
                 target.activations += 1;
-                if e.field("by").text() == "user" {
+                if matches!(field_text(event, "actor", "por"), "user" | "usuario")
+                    || event.field("by").text() == "user"
+                {
                     target.user_activations += 1;
                 }
             }
-            "outcome" => {
-                let ok = matches!(e.field("ok"), Value::Bool(true));
-                let (holdout, spoke, suggested) =
-                    turns
-                        .get(&turn)
-                        .cloned()
-                        .unwrap_or((false, false, Vec::new()));
-                if holdout {
-                    ag.holdout_arm.1 += 1;
-                    if ok {
-                        ag.holdout_arm.0 += 1;
-                    }
-                } else if spoke {
-                    ag.suggested_arm.1 += 1;
-                    if ok {
-                        ag.suggested_arm.0 += 1;
-                    }
-                }
-                for s in suggested {
-                    let target = ag.skills.entry(s).or_default();
-                    target.turns_judged += 1;
-                    if ok {
-                        target.turns_ok += 1;
-                    }
-                    target.reprompts += e.field("reprompt").number() as u64;
-                    target.errors += e.field("errors").number() as u64;
-                    target.retries += e.field("retries").number() as u64;
-                    target.tokens_in += e.field("tokens_in").number();
-                    target.tokens_out += e.field("tokens_out").number();
-                    target.cost_usd += e.field("cost_usd").number();
-                    let turns_to = e.field("turns").number();
-                    if turns_to > 0.0 {
-                        target.turns_to_completion.push(turns_to);
-                    }
-                }
+            "outcome" | "resultado" if authoritative_outcome(event) => {
+                // Deliberately unreachable locally. The server aggregates verified receipts.
+                let _ = turns.get(turn_id(event));
             }
             _ => {}
         }
     }
-    ag
+    aggregate
 }
 
-pub fn median(v: &mut [f64]) -> f64 {
-    if v.is_empty() {
+pub fn median(values: &mut [f64]) -> f64 {
+    if values.is_empty() {
         return 0.0;
     }
-    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let n = v.len();
-    if n % 2 == 1 {
-        v[n / 2]
+    values.sort_by(|left, right| left.total_cmp(right));
+    let length = values.len();
+    if length % 2 == 1 {
+        values[length / 2]
     } else {
-        (v[n / 2 - 1] + v[n / 2]) / 2.0
+        (values[length / 2 - 1] + values[length / 2]) / 2.0
     }
 }
 
-// ------------------------------------------------------------------- report
-
-pub fn text_report(ag: &Aggregate) -> String {
-    let mut s = String::new();
-    if ag.routes == 0 {
-        return "Batuta: no turn recorded yet.\n\
-                Install the hook with `batuta install-hooks` and come back after a few turns.\n"
-            .to_string();
+pub fn text_report(aggregate: &Aggregate) -> String {
+    if aggregate.routes == 0 {
+        return "Batuta: no turn recorded yet.\nInstall the hook with `batuta install-hooks` and return after a few turns.\n".to_string();
     }
-
-    s.push_str("BATUTA — local report\n");
-    s.push_str(&format!(
-        "period: {} to {}\n",
-        data::instant_utc(ag.first),
-        data::instant_utc(ag.last)
-    ));
-    s.push('\n');
-
-    let silence = ag.routes - ag.routes_suggested;
-    s.push_str("FUNNEL\n");
-    s.push_str(&format!("  turns seen ................ {}\n", ag.routes));
-    s.push_str(&format!(
-        "  router spoke ............... {} ({:.1}%)\n",
-        ag.routes_suggested,
-        pct(ag.routes_suggested, ag.routes)
-    ));
-    s.push_str(&format!(
-        "  router silent ............... {} ({:.1}%)\n",
-        silence,
-        pct(silence, ag.routes)
-    ));
-    s.push_str(&format!(
-        "  holdout (silent on purpose) {}\n",
-        ag.routes_holdout
-    ));
-    if ag.ms_samples > 0 {
-        s.push_str(&format!(
-            "  average route time ....... {:.1}ms\n",
-            ag.ms_total / ag.ms_samples as f64
+    let mut report = format!(
+        "BATUTA — local observational report\nperiod: {} to {}\n\nFUNNEL\n  turns seen ................. {}\n  router spoke ............... {} ({:.1}%)\n  router silent .............. {} ({:.1}%)\n  declared holdout ........... {}\n",
+        data::instant_utc(aggregate.first), data::instant_utc(aggregate.last),
+        aggregate.routes, aggregate.routes_suggested,
+        pct(aggregate.routes_suggested, aggregate.routes),
+        aggregate.routes - aggregate.routes_suggested,
+        pct(aggregate.routes - aggregate.routes_suggested, aggregate.routes),
+        aggregate.routes_holdout,
+    );
+    if aggregate.ms_samples > 0 {
+        report.push_str(&format!(
+            "  average route time ......... {:.1}ms\n",
+            aggregate.ms_total / aggregate.ms_samples as f64
         ));
     }
-    s.push('\n');
-
-    s.push_str("BY SKILL\n");
-    s.push_str("  skill                          routes  fired   trigger   cost/task\n");
-    let mut rows: Vec<(&String, &BySkill)> = ag.skills.iter().collect();
-    rows.sort_by_key(|l| std::cmp::Reverse(l.1.routes));
-    for (name, p) in &rows {
-        let trigger = pct(p.activations, p.routes);
-        let cost = if p.turns_ok > 0 {
-            format!("US$ {:.4}", p.cost_usd / p.turns_ok as f64)
-        } else {
-            "—".to_string()
-        };
-        s.push_str(&format!(
-            "  {:<28} {:>6} {:>7} {:>7.1}%   {}\n",
-            truncate_str(name, 28),
-            p.routes,
-            p.activations,
-            trigger,
-            cost
+    report.push_str("\nBY SKILL\n  skill                         routes  fired  trigger\n");
+    let mut rows: Vec<_> = aggregate.skills.iter().collect();
+    rows.sort_by_key(|(_, metrics)| std::cmp::Reverse(metrics.routes));
+    for (skill, metrics) in rows {
+        report.push_str(&format!(
+            "  {:<28} {:>6} {:>6} {:>7.1}%\n",
+            truncate(skill, 28),
+            metrics.routes,
+            metrics.activations,
+            pct(metrics.activations, metrics.routes)
         ));
     }
-    s.push('\n');
-
-    let ghosts: Vec<&String> = rows
-        .iter()
-        .filter(|(_, p)| p.routes >= 5 && p.activations == 0)
-        .map(|(n, _)| *n)
-        .collect();
-    if ghosts.is_empty() {
-        s.push_str("GHOST SKILLS\n  none (skill suggested 5+ times and never used)\n\n");
-    } else {
-        s.push_str("GHOST SKILLS — suggested 5+ times, never used\n");
-        for f in ghosts {
-            s.push_str(&format!("  {}\n", f));
-        }
-        s.push('\n');
-    }
-
-    s.push_str("LIFT (causal holdout)\n");
-    if ag.holdout_arm.1 == 0 {
-        s.push_str(
-            "  no control sample yet. Holdout silences the router in 5% of turns\n\
-             \x20 on purpose; without it the number measures correlation, not cause.\n",
-        );
-    } else {
-        let with = pct(ag.suggested_arm.0, ag.suggested_arm.1);
-        let without = pct(ag.holdout_arm.0, ag.holdout_arm.1);
-        s.push_str(&format!(
-            "  with router ..... {:.1}% of {} turns\n  without router .. {:.1}% of {} turns\n  lift ............ {:+.1} points\n",
-            with, ag.suggested_arm.1, without, ag.holdout_arm.1, with - without
-        ));
-        if ag.holdout_arm.1 < 30 {
-            s.push_str(&format!(
-                "  WARNING: n={} in the control group. Weak number. Don't publish as a conclusion.\n",
-                ag.holdout_arm.1
-            ));
-        }
-    }
-    s.push('\n');
-    s.push_str("All of this is local. Nothing left this machine.\n");
-    s
+    report.push_str(
+        "\nOUTCOMES\n  Local events are observations, not proof of delivery. Success and causal lift\n  require an independently judged, signed receipt from a trusted runner.\n\nAll of this is local. Nothing left this machine.\n",
+    );
+    report
 }
 
-fn truncate_str(s: &str, n: usize) -> String {
-    if s.chars().count() <= n {
-        s.to_string()
+fn truncate(value: &str, length: usize) -> String {
+    if value.chars().count() <= length {
+        value.to_string()
     } else {
-        s.chars().take(n - 1).collect::<String>() + "…"
+        value.chars().take(length - 1).collect::<String>() + "…"
     }
 }
 
-pub fn pct(a: u64, b: u64) -> f64 {
-    if b == 0 {
+pub fn pct(numerator: u64, denominator: u64) -> f64 {
+    if denominator == 0 {
         0.0
     } else {
-        100.0 * a as f64 / b as f64
+        100.0 * numerator as f64 / denominator as f64
     }
 }
 
-// --------------------------------------------------------------- daily summary
-
-/// The only format that gets uploaded. No prompt, no prompt hash, no file path,
-/// no username. One line per skill per day.
-pub fn daily_summary(ag: &Aggregate, day: &str, batuta_version: &str, mode: &str) -> Value {
-    let mut skills = Vec::new();
-    for (name, p) in &ag.skills {
-        let mut tc = p.turns_to_completion.clone();
-        skills.push(object(vec![
-            ("skill", text(name.clone())),
-            ("version", text(p.version.clone())),
-            ("routes", number(p.routes as f64)),
-            ("activations", number(p.activations as f64)),
-            ("user_activations", number(p.user_activations as f64)),
-            ("turns_judged", number(p.turns_judged as f64)),
-            ("turns_ok", number(p.turns_ok as f64)),
-            ("reprompts", number(p.reprompts as f64)),
-            ("errors", number(p.errors as f64)),
-            ("retries", number(p.retries as f64)),
-            ("tokens_in", number(p.tokens_in)),
-            ("tokens_out", number(p.tokens_out)),
-            ("cost_usd", number(p.cost_usd)),
-            ("median_turns_to_completion", number(median(&mut tc))),
-            ("ghost", Value::Bool(p.routes >= 5 && p.activations == 0)),
-        ]));
-    }
-
+/// The only local format eligible for upload, and only after explicit opt-in.
+pub fn daily_summary(aggregate: &Aggregate, date: &str, batuta_version: &str, mode: &str) -> Value {
+    let skills = aggregate
+        .skills
+        .iter()
+        .map(|(skill, metrics)| {
+            let mut turns = metrics.turns_to_completion.clone();
+            object(vec![
+                ("skill", text(skill)),
+                ("version", text(&metrics.version)),
+                ("routes", number(metrics.routes as f64)),
+                ("activations", number(metrics.activations as f64)),
+                ("user_activations", number(metrics.user_activations as f64)),
+                ("judged_turns", number(metrics.turns_judged as f64)),
+                ("successful_turns", number(metrics.turns_ok as f64)),
+                ("reprompts", number(metrics.reprompts as f64)),
+                ("errors", number(metrics.errors as f64)),
+                ("retries", number(metrics.retries as f64)),
+                ("tokens_in", number(metrics.tokens_in)),
+                ("tokens_out", number(metrics.tokens_out)),
+                ("cost_usd", number(metrics.cost_usd)),
+                ("median_turns_to_finish", number(median(&mut turns))),
+                (
+                    "ghost",
+                    Value::Bool(metrics.routes >= 5 && metrics.activations == 0),
+                ),
+            ])
+        })
+        .collect();
     object(vec![
-        ("schema", text("batuta.daily_summary.v1")),
-        ("day", text(day)),
-        ("installation", text(home::installation_id())),
-        ("batuta_version", text(batuta_version)),
-        ("mode", text(mode)),
-        ("routes", number(ag.routes as f64)),
-        ("routes_suggested", number(ag.routes_suggested as f64)),
-        ("routes_holdout", number(ag.routes_holdout as f64)),
-        (
-            "suggested_arm",
-            object(vec![
-                ("ok", number(ag.suggested_arm.0 as f64)),
-                ("n", number(ag.suggested_arm.1 as f64)),
-            ]),
-        ),
-        (
-            "holdout_arm",
-            object(vec![
-                ("ok", number(ag.holdout_arm.0 as f64)),
-                ("n", number(ag.holdout_arm.1 as f64)),
-            ]),
-        ),
-        (
-            "declared_bias",
-            text("whoever installs Batuta already cares about skills; the sample is voluntary and not representative"),
-        ),
+        ("schema", text("batuta.daily_summary.v2")), ("date", text(date)),
+        ("installation_id", text(home::installation_id())),
+        ("batuta_version", text(batuta_version)), ("mode", text(mode)),
+        ("routes", number(aggregate.routes as f64)),
+        ("routes_with_suggestions", number(aggregate.routes_suggested as f64)),
+        ("holdout_routes", number(aggregate.routes_holdout as f64)),
+        ("treatment_arm", object(vec![("passed", number(aggregate.suggested_arm.0 as f64)), ("total", number(aggregate.suggested_arm.1 as f64))])),
+        ("holdout_arm", object(vec![("passed", number(aggregate.holdout_arm.0 as f64)), ("total", number(aggregate.holdout_arm.1 as f64))])),
+        ("declared_bias", text("Batuta installations are a voluntary sample of users already interested in Agent Skills; results are not population-representative.")),
+        ("measurement_disclaimer", text("Batuta is an observability and measurement layer, never sole proof of delivery. Successful outcomes require independently judged, signed receipts from a trusted runner.")),
         ("skills", Value::List(skills)),
     ])
 }

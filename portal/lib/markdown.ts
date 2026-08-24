@@ -201,6 +201,6 @@ export function documento(nome: string): string {
   try {
     return readFileSync(join(process.cwd(), "conteudo", nome), "utf8");
   } catch {
-    return `# Documento indisponível\n\nO arquivo \`${nome}\` não foi sincronizado neste build.`;
+    return `# Document unavailable\n\nThe file \`${nome}\` was not synchronized in this build.`;
   }
 }

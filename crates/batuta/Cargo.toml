@@ -3,13 +3,13 @@ name = "batuta"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.74"
-description = "Camada aberta de medicao de Agent Skills — caminho quente: roteia e registra, local, em milissegundos."
+description = "Open Agent Skills measurement layer: local routing and observation in milliseconds."
 license = "MIT"
 repository = "https://github.com/filipecrocks/batuta"
 homepage = "https://batuta.space"
 
-# Lei do projeto: o binario do caminho quente nao tem dependencia, nao tem async,
-# nao tem rede. Se um dia precisar de alguma das tres, e porque saiu do caminho quente.
+# Project rule: the hot-path binary has no dependencies, async runtime, or network.
+# If it ever needs one of those, that code no longer belongs on the hot path.
 [dependencies]
 
 [profile.release]

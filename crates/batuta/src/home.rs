@@ -1,14 +1,17 @@
-//! ~/.batuta — where Batuta keeps what belongs to it. Salt, index, events, config.
-//! Nothing here uploads anywhere without explicit opt-in, and the prompt never uploads.
+//! Owner-private local state under `BATUTA_HOME` or `~/.batuta`.
 
 use crate::sha256::{hex, sha256};
+use crate::storage;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn app_dir() -> PathBuf {
-    if let Ok(p) = std::env::var("BATUTA_HOME") {
-        return PathBuf::from(p);
+    if let Ok(path) = std::env::var("BATUTA_HOME") {
+        return PathBuf::from(path);
+    }
+    // v0.x compatibility for installations created before the English rename.
+    if let Ok(path) = std::env::var("BATUTA_CASA") {
+        return PathBuf::from(path);
     }
     user_home().join(".batuta")
 }
@@ -20,66 +23,86 @@ pub fn user_home() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("."))
 }
 
+pub fn ensure() -> std::io::Result<PathBuf> {
+    let directory = app_dir();
+    storage::ensure_private_dir(&directory)?;
+    Ok(directory)
+}
+
+/// Compatibility helper for the original infallible API.
 pub fn ensure_dir() -> PathBuf {
-    let c = app_dir();
-    let _ = fs::create_dir_all(&c);
-    c
+    ensure().unwrap_or_else(|_| app_dir())
 }
 
 // ------------------------------------------------------------------------ salt
 
-/// Local salt, generated once, never transmitted. It's what makes the prompt hash
-/// useless to anyone but this machine: without the salt, there's no way to test
-/// a prompt guess against the published hash.
+/// Returns the local salt or fails closed if the OS has no secure random source.
+pub fn try_salt() -> std::io::Result<String> {
+    let file = ensure()?.join("salt");
+    if let Ok(value) = fs::read_to_string(&file) {
+        let value = value.trim().to_string();
+        if value.len() >= 32 {
+            storage::restrict_file(&file, 0o600)?;
+            return Ok(value);
+        }
+    }
+    let generated = generate_salt()?;
+    storage::atomic_write(&file, generated.as_bytes(), 0o600)?;
+    Ok(generated)
+}
+
+/// Compatibility wrapper. Canonical hot-path code uses `try_salt` and stays silent
+/// on failure rather than manufacturing predictable entropy.
 pub fn salt() -> String {
-    let file = ensure_dir().join("salt");
-    if let Ok(s) = fs::read_to_string(&file) {
-        let s = s.trim().to_string();
-        if s.len() >= 32 {
-            return s;
-        }
-    }
-    let new = generate_salt();
-    if let Ok(mut f) = fs::File::create(&file) {
-        let _ = f.write_all(new.as_bytes());
-    }
-    restrict(&file);
-    new
+    try_salt().unwrap_or_else(|error| panic!("batuta: cannot create a secure local salt: {error}"))
 }
 
-fn generate_salt() -> String {
-    // WARNING: /dev/urandom HAS NO END. `fs::read` on it reads forever and eats
-    // all the machine's memory — that's exactly what happened in the first version
-    // of this. It has to be a fixed-size read.
-    if let Ok(mut f) = fs::File::open("/dev/urandom") {
+fn generate_salt() -> std::io::Result<String> {
+    // `/dev/urandom` has no end; always read a fixed-size buffer.
+    if let Ok(mut file) = fs::File::open("/dev/urandom") {
         use std::io::Read;
-        let mut b = [0u8; 32];
-        if f.read_exact(&mut b).is_ok() {
-            return hex(&sha256(&b));
+        let mut bytes = [0_u8; 32];
+        if file.read_exact(&mut bytes).is_ok() {
+            return Ok(hex(&sha256(&bytes)));
         }
     }
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let seed = format!("{}|{}|{:?}", nanos, std::process::id(), user_home());
-    hex(&sha256(seed.as_bytes()))
+
+    #[cfg(windows)]
+    {
+        #[link(name = "bcrypt")]
+        extern "system" {
+            fn BCryptGenRandom(
+                algorithm: *mut std::ffi::c_void,
+                buffer: *mut u8,
+                length: u32,
+                flags: u32,
+            ) -> i32;
+        }
+        const BCRYPT_USE_SYSTEM_PREFERRED_RNG: u32 = 0x2;
+        let mut bytes = [0_u8; 32];
+        // SAFETY: the OS fills exactly `bytes.len()` bytes in a live buffer.
+        let status = unsafe {
+            BCryptGenRandom(
+                std::ptr::null_mut(),
+                bytes.as_mut_ptr(),
+                bytes.len() as u32,
+                BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+            )
+        };
+        if status == 0 {
+            return Ok(hex(&sha256(&bytes)));
+        }
+    }
+
+    Err(std::io::Error::other(
+        "operating system secure random source is unavailable",
+    ))
 }
 
-#[cfg(unix)]
-fn restrict(p: &Path) {
-    use std::os::unix::fs::PermissionsExt;
-    let _ = fs::set_permissions(p, fs::Permissions::from_mode(0o600));
-}
-#[cfg(not(unix))]
-fn restrict(_p: &Path) {}
-
-/// Installation identifier: derived from the salt, so it carries no username,
-/// hostname, or folder path. It's only good for saying "these lines came from the
-/// same machine".
 pub fn installation_id() -> String {
-    let s = salt();
-    hex(&sha256(format!("installation|{}", s).as_bytes()))[..16].to_string()
+    let salt = salt();
+    // Keep the v0 derivation literal so upgrades retain their installation ID.
+    hex(&sha256(format!("instalacao|{salt}").as_bytes()))[..16].to_string()
 }
 
 // --------------------------------------------------------------------- config
@@ -94,10 +117,7 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config {
-            // explicit opt-in. As long as this is false, nothing leaves the machine,
-            // and `batuta report` still counts in full — the local value isn't
-            // hostage to the upload.
+        Self {
             upload: false,
             holdout_pct: 5,
             portal: "https://batuta.space".to_string(),
@@ -107,43 +127,48 @@ impl Default for Config {
 }
 
 pub fn read_config() -> Config {
-    let mut c = Config::default();
-    let file = app_dir().join("config.txt");
-    let Ok(s) = fs::read_to_string(file) else {
-        return c;
+    let mut config = Config::default();
+    let Ok(contents) = fs::read_to_string(app_dir().join("config.txt")) else {
+        return config;
     };
-    for line in s.lines() {
+    for line in contents.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let Some((k, v)) = line.split_once('=') else {
+        let Some((key, value)) = line.split_once('=') else {
             continue;
         };
-        let v = v.trim();
-        match k.trim() {
-            "upload" => c.upload = v == "yes" || v == "true" || v == "1",
-            "holdout_pct" => c.holdout_pct = v.parse().unwrap_or(5).min(50),
-            "portal" => c.portal = v.to_string(),
-            "informed" => c.informed = v == "yes" || v == "true" || v == "1",
+        let value = value.trim();
+        match key.trim() {
+            "upload" | "envio" => config.upload = matches!(value, "yes" | "sim" | "true" | "1"),
+            "holdout_pct" => config.holdout_pct = value.parse().unwrap_or(5).min(50),
+            "portal" => config.portal = value.to_string(),
+            "informed" | "warned" | "avisado" => {
+                config.informed = matches!(value, "yes" | "sim" | "true" | "1")
+            }
             _ => {}
         }
     }
-    c
+    config
 }
 
-pub fn write_config(c: &Config) {
-    let file = ensure_dir().join("config.txt");
+pub fn write_config(config: &Config) -> std::io::Result<()> {
+    let file = ensure()?.join("config.txt");
     let body = format!(
-        "# Batuta config — nothing leaves this machine while upload=no\n\
+        "# Batuta config — nothing is uploaded while upload=no\n\
          upload={}\n\
          holdout_pct={}\n\
          portal={}\n\
          informed={}\n",
-        if c.upload { "yes" } else { "no" },
-        c.holdout_pct,
-        c.portal,
-        if c.informed { "yes" } else { "no" }
+        if config.upload { "yes" } else { "no" },
+        config.holdout_pct,
+        config.portal,
+        if config.informed { "yes" } else { "no" }
     );
-    let _ = fs::write(file, body);
+    storage::atomic_write(&file, body.as_bytes(), 0o600)
+}
+
+pub fn atomic_write(path: &Path, bytes: &[u8], mode: u32) -> std::io::Result<()> {
+    storage::atomic_write(path, bytes, mode)
 }

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batuta.space/schema/lab-event.v1.schema.json",
+  "title": "LAB to Batuta processing event",
+  "description": "Privacy-minimized observational telemetry. Never include prompts, responses, transcripts, credentials, environment data, or secrets. Batuta is not sole proof of delivery: the trusted runner signs the evidence receipt and a different, versioned model judges passed/failed outcomes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "event_id", "run_id", "project", "order", "tool", "model", "skill", "cost", "outcome", "receipt"],
+  "properties": {
+    "schema": { "const": "batuta.lab_event.v1" },
+    "event_id": { "type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$" },
+    "run_id": { "$ref": "#/$defs/id" },
+    "project": { "$ref": "#/$defs/id" },
+    "order": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "tool": { "$ref": "#/$defs/id" },
+    "model": { "$ref": "#/$defs/id" },
+    "skill": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "currency": { "const": "USD" }
+      }
+    },
+    "outcome": { "$ref": "#/$defs/outcome" },
+    "receipt": { "$ref": "#/$defs/receipt" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,127}$" },
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "judge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "version", "criteria_hash"],
+      "properties": {
+        "model": { "$ref": "#/$defs/id" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "criteria_hash": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "outcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "authority", "judge"],
+          "properties": {
+            "status": { "enum": ["passed", "failed"] },
+            "authority": { "const": "independent_judge" },
+            "judge": { "$ref": "#/$defs/judge" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "authority"],
+          "properties": {
+            "status": { "const": "unknown" },
+            "authority": { "const": "runtime_observation" }
+          }
+        }
+      ]
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issuer", "key_id", "algorithm", "signed_at", "evidence_hash", "signature"],
+      "properties": {
+        "issuer": { "$ref": "#/$defs/id" },
+        "key_id": { "$ref": "#/$defs/id" },
+        "algorithm": { "const": "ed25519" },
+        "signed_at": { "type": "string", "format": "date-time" },
+        "evidence_hash": { "$ref": "#/$defs/hash" },
+        "signature": { "type": "string", "minLength": 80, "maxLength": 128, "contentEncoding": "base64" }
+      }
+    }
+  }
+}

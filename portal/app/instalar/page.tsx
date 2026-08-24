@@ -23,13 +23,13 @@ export default function Instalar() {
           <span className="mono">SHA256SUMS</span> da release. Se não bater, não instala.
         </p>
 
-        <h3>caminho 2 — npm</h3>
+        <h3>caminho 2 — npm (ainda indisponível)</h3>
         <pre>
-          <code>npm install -g batuta</code>
+          <code>não instale o pacote npm sem escopo — ele pertence a outro projeto</code>
         </pre>
         <p className="miudo">
-          O pacote npm é um wrapper de dez linhas que baixa o binário. A inteligência é
-          toda do binário — e é assim de propósito.
+          O wrapper deste repositório permanecerá privado até que o pacote verificado
+          <span className="mono"> @filipecrocks/batuta</span> seja publicado com proveniência.
         </p>
 
         <h3>caminho 3 — do fonte</h3>

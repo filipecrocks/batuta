@@ -1,29 +1,39 @@
-//! BATUTA — open measurement layer for Agent Skills.
-//! This binary is the HOT PATH: it routes and logs, locally, in milliseconds.
-//! It does not access the network. Ever. If a command needs the network, it doesn't live here.
+//! Batuta's dependency-free offline CLI and routing hot path.
 
-use batuta::json::{self, number, object, text, Value};
-use batuta::{conflicts, data, find, home, index, record, route, VERSION};
+use batuta::json::{self, number, object, text as json_text, Value};
+use batuta::{conflicts, data, find, home, index, lifecycle, record, route, text, VERSION};
 use std::io::Read;
+use std::time::Duration;
+
+const MAX_STDIN_BYTES: u64 = 256 * 1024;
+const ROUTE_TIMEOUT: Duration = Duration::from_millis(300);
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let cmd = args.first().map(|s| s.as_str()).unwrap_or("help");
+    let command = args.first().map(String::as_str).unwrap_or("help");
     let rest = &args[1.min(args.len())..];
-
-    let code = match cmd {
+    let exit_code = match command {
         "index" => cmd_index(rest),
+        "indexar" => legacy("indexar", "index", || cmd_index(rest)),
         "route" => cmd_route(rest),
+        "rota" => legacy("rota", "route", || cmd_route(rest)),
         "log" => cmd_log(rest),
+        "registrar" => legacy("registrar", "log", || cmd_log(rest)),
         "report" => cmd_report(rest),
+        "relatorio" | "relatório" => legacy(command, "report", || cmd_report(rest)),
         "summary" => cmd_summary(rest),
+        "resumo" => legacy("resumo", "summary", || cmd_summary(rest)),
         "find" => cmd_find(rest),
-        "conflicts" => cmd_conflicts(rest),
+        "achar" => legacy("achar", "find", || cmd_find(rest)),
+        "conflicts" => cmd_conflicts(),
+        "conflitos" => legacy("conflitos", "conflicts", cmd_conflicts),
         "config" => cmd_config(rest),
         "privacy" => cmd_privacy(),
+        "privacidade" => legacy("privacidade", "privacy", cmd_privacy),
         "install-hooks" | "hooks" => cmd_hooks(rest),
+        "hook" => cmd_hook(rest),
         "version" | "--version" | "-V" => {
-            println!("batuta {}", VERSION);
+            println!("batuta {VERSION}");
             0
         }
         "help" | "--help" | "-h" | "" => {
@@ -31,411 +41,470 @@ fn main() {
             0
         }
         other => {
-            eprintln!("batuta: unknown command '{}'\n", other);
+            eprintln!("batuta: unknown command '{other}'\n");
             print!("{}", help());
             2
         }
     };
-    std::process::exit(code);
+    std::process::exit(exit_code);
 }
 
 fn help() -> String {
     format!(
-        "batuta {v} — measures whether an Agent Skill works, at what cost, on which model.
-https://batuta.space · zero profit · the prompt never leaves your machine
+        "batuta {VERSION} — measure whether Agent Skills work, at what cost, and on which model.
+https://batuta.space · zero profit · prompts never leave your machine
 
-  batuta index [--dir PATH]...        scans skills and builds the local index
-  batuta route \"<request>\"            routes (hot path, no network)
-       --stdin | --stdin-json         reads the request from stdin
-       --mode hook|mcp|skill          where it came from (default: hook)
-       --turn ID                      ties together route, activation and outcome
-       --json                         returns the route as JSON
-  batuta log --event activation --skill NAME [--by model|user] [--turn ID]
-  batuta log --event outcome [--ok|--failed] [--reprompt N] [--errors N]
-             [--retries N] [--turns N] [--tokens-in N] [--tokens-out N]
-             [--cost N] [--turn ID]
-  batuta report [--day YYYY-MM-DD]    funnel, ghost skill, cost per task, lift
-  batuta summary [--day YYYY-MM-DD]   shows EXACTLY what would upload (aggregate)
-  batuta find \"<what you want to do>\"   installed -> available -> gap
-  batuta conflicts                    skills that compete with each other
+  batuta index [--dir PATH]...        scan skills and build the local index
+  batuta route \"<request>\"           route locally without network access
+       --stdin | --stdin-json         read the request from standard input
+       --mode hook|mcp|skill|lab      observation source (default: hook)
+       --turn-id ID                   correlate route, activation, and outcome
+       --json                         return the route event as JSON
+  batuta log --event activation --skill NAME [--actor model|user] [--turn-id ID]
+  batuta log --event outcome          record an untrusted manual observation
+  batuta report [--date YYYY-MM-DD]   show local observational metrics
+  batuta summary [--date YYYY-MM-DD]  preview the private aggregate upload
+  batuta find \"<what you need>\"      installed -> available -> gap
+  batuta conflicts                    find competing skills
   batuta config [key value]           upload, holdout_pct, portal
-  batuta privacy                      what gets recorded, in plain language
-  batuta install-hooks [--apply]      installs the UserPromptSubmit hook
+  batuta privacy                      explain local and uploaded data
+  batuta install-hooks                write route/activation/outcome hooks
 
-The report works 100%% offline. Sending data is opt-in, and what uploads is the
-aggregated daily summary by skill — never a raw event, never your prompt text.
-",
-        v = VERSION
+Upload is explicit opt-in and includes only a daily per-skill aggregate. Batuta
+is an observability layer, never sole proof of delivery. Portuguese aliases remain
+available with deprecation warnings during the v0.x compatibility window.
+"
     )
 }
 
-// ------------------------------------------------------------------ utility
+fn legacy<F: FnOnce() -> i32>(old: &str, new: &str, action: F) -> i32 {
+    eprintln!("batuta: warning: '{old}' is deprecated; use '{new}'");
+    action()
+}
 
-fn opt(args: &[String], name: &str) -> Option<String> {
-    let mut i = 0;
-    while i < args.len() {
-        if args[i] == name {
-            return args.get(i + 1).cloned();
+fn option(args: &[String], name: &str) -> Option<String> {
+    let mut index = 0;
+    while index < args.len() {
+        if args[index] == name {
+            return args.get(index + 1).cloned();
         }
-        if let Some(r) = args[i].strip_prefix(&format!("{}=", name)) {
-            return Some(r.to_string());
+        if let Some(value) = args[index].strip_prefix(&format!("{name}=")) {
+            return Some(value.to_string());
         }
-        i += 1;
+        index += 1;
     }
     None
 }
+
 fn has(args: &[String], name: &str) -> bool {
-    args.iter().any(|a| a == name)
+    args.iter().any(|argument| argument == name)
 }
-fn optn(args: &[String], name: &str) -> f64 {
-    opt(args, name)
-        .and_then(|s| s.parse::<f64>().ok())
+
+fn numeric_option(args: &[String], names: &[&str]) -> f64 {
+    names
+        .iter()
+        .find_map(|name| option(args, name))
+        .and_then(|value| value.parse().ok())
         .unwrap_or(0.0)
 }
+
 fn positional(args: &[String]) -> Option<String> {
-    let mut i = 0;
-    while i < args.len() {
-        let a = &args[i];
-        if a.starts_with("--") {
-            // flags with a value consume the next one
-            if !a.contains('=')
-                && matches!(
-                    a.as_str(),
-                    "--mode"
-                        | "--turn"
-                        | "--dir"
-                        | "--event"
-                        | "--skill"
-                        | "--by"
-                        | "--day"
-                        | "--reprompt"
-                        | "--errors"
-                        | "--retries"
-                        | "--turns"
-                        | "--tokens-in"
-                        | "--tokens-out"
-                        | "--cost"
-                )
-            {
-                i += 2;
-                continue;
-            }
-            i += 1;
-            continue;
+    const VALUE_OPTIONS: &[&str] = &[
+        "--mode",
+        "--modo",
+        "--turn-id",
+        "--turn",
+        "--turno",
+        "--dir",
+        "--event",
+        "--evento",
+        "--skill",
+        "--actor",
+        "--by",
+        "--por",
+        "--date",
+        "--day",
+        "--dia",
+        "--reprompt",
+        "--errors",
+        "--erros",
+        "--retries",
+        "--turns",
+        "--turnos",
+        "--tokens-in",
+        "--tokens-out",
+        "--cost",
+        "--custo",
+        "--version",
+        "--versao",
+        "--source",
+        "--fonte",
+    ];
+    let mut index = 0;
+    while index < args.len() {
+        let argument = &args[index];
+        if argument.starts_with("--") {
+            index += if !argument.contains('=') && VALUE_OPTIONS.contains(&argument.as_str()) {
+                2
+            } else {
+                1
+            };
+        } else {
+            return Some(argument.clone());
         }
-        return Some(a.clone());
     }
     None
 }
 
 fn read_stdin() -> String {
-    let mut s = String::new();
-    let _ = std::io::stdin().read_to_string(&mut s);
-    s
+    let mut input = String::new();
+    let _ = std::io::stdin()
+        .take(MAX_STDIN_BYTES + 1)
+        .read_to_string(&mut input);
+    if input.len() as u64 > MAX_STDIN_BYTES {
+        String::new()
+    } else {
+        input
+    }
 }
 
-// -------------------------------------------------------------------- commands
-
 fn cmd_index(args: &[String]) -> i32 {
-    let mut folders: Vec<std::path::PathBuf> = Vec::new();
-    let mut i = 0;
-    while i < args.len() {
-        if args[i] == "--dir" {
-            if let Some(v) = args.get(i + 1) {
-                folders.push(std::path::PathBuf::from(v));
+    let mut folders = Vec::new();
+    let mut position = 0;
+    while position < args.len() {
+        if args[position] == "--dir" {
+            if let Some(value) = args.get(position + 1) {
+                folders.push(std::path::PathBuf::from(value));
             }
-            i += 2;
-            continue;
+            position += 2;
+        } else {
+            position += 1;
         }
-        i += 1;
     }
     if folders.is_empty() {
-        let cwd = std::env::current_dir().unwrap_or_else(|_| ".".into());
-        folders = index::default_folders(&home::user_home(), &cwd);
+        let current = std::env::current_dir().unwrap_or_else(|_| ".".into());
+        folders = index::default_folders(&home::user_home(), &current);
     }
     if folders.is_empty() {
-        eprintln!(
-            "batuta: couldn't find a skills folder.\n  \
-             looked in ~/.claude/skills, ~/.config/claude/skills, ~/.codex/skills, ./.claude/skills, ./skills\n  \
-             use --dir PATH to point at one."
-        );
+        eprintln!("batuta: no skill directory found; use --dir PATH");
         return 1;
     }
-
-    let t0 = std::time::Instant::now();
-    let idx = index::build(&folders);
-    let body = index::write(&idx);
-    let dest = home::ensure_dir().join("index.txt");
-    if let Err(e) = std::fs::write(&dest, body) {
-        eprintln!("batuta: couldn't write {}: {}", dest.display(), e);
+    let started = std::time::Instant::now();
+    let built = index::build(&folders);
+    let destination = home::app_dir().join("index.txt");
+    if let Err(error) = home::atomic_write(&destination, index::write(&built).as_bytes(), 0o600) {
+        eprintln!("batuta: could not write {}: {error}", destination.display());
         return 1;
     }
     println!(
-        "batuta: {} skills indexed in {:.0}ms, {} distinct terms",
-        idx.skills.len(),
-        t0.elapsed().as_micros() as f64 / 1000.0,
-        idx.postings.len()
+        "batuta: indexed {} skills in {:.0}ms ({} distinct terms)",
+        built.skills.len(),
+        started.elapsed().as_secs_f64() * 1000.0,
+        built.postings.len()
     );
-    for p in &folders {
-        println!("  source: {}", p.display());
+    for folder in folders {
+        println!("  source: {}", folder.display());
     }
-    println!("  index: {}", dest.display());
-    if idx.skills.is_empty() {
-        println!("  (no SKILL.md found — the router will stay silent, and that's correct)");
-    }
+    println!("  index: {}", destination.display());
     0
 }
 
 fn cmd_route(args: &[String]) -> i32 {
-    let prompt = if has(args, "--stdin-json") {
-        let raw = read_stdin();
-        match json::read(&raw) {
-            Ok(v) => {
-                let p = v.field("prompt").text().to_string();
-                if p.is_empty() {
-                    v.field("user_prompt").text().to_string()
+    let (prompt, hook_payload) = if has(args, "--stdin-json") {
+        match json::read(&read_stdin()) {
+            Ok(payload) => {
+                let canonical = payload.field("prompt").text();
+                let prompt = if canonical.is_empty() {
+                    payload.field("user_prompt").text().to_string()
                 } else {
-                    p
-                }
+                    canonical.to_string()
+                };
+                (prompt, Some(payload))
             }
-            // broken input must not bring down the user's turn
-            Err(_) => String::new(),
+            Err(_) => (String::new(), None),
         }
     } else if has(args, "--stdin") {
-        read_stdin()
+        (read_stdin(), None)
     } else {
-        positional(args).unwrap_or_default()
+        (positional(args).unwrap_or_default(), None)
     };
-
     if prompt.trim().is_empty() {
         return 0;
     }
-
-    let mode = opt(args, "--mode").unwrap_or_else(|| "hook".to_string());
-    let turn = opt(args, "--turn");
-    let s = route::route(&prompt, &mode, turn, VERSION);
-    route::log_event(&s);
-
+    let mode = option(args, "--mode")
+        .or_else(|| option(args, "--modo"))
+        .filter(|value| matches!(value.as_str(), "hook" | "mcp" | "skill" | "lab"))
+        .unwrap_or_else(|| "hook".to_string());
+    let turn_id = option(args, "--turn-id")
+        .or_else(|| option(args, "--turn"))
+        .or_else(|| option(args, "--turno"))
+        .filter(|value| text::is_safe_correlation_id(value));
+    let version = VERSION.to_string();
+    let result = route::run_with_timeout(ROUTE_TIMEOUT, move || {
+        let output = route::route(&prompt, &mode, turn_id, &version);
+        let _ = route::log_event(&output);
+        if let Some(payload) = hook_payload {
+            let _ = lifecycle::begin_turn(&payload, &output);
+        }
+        output
+    });
+    let Ok(output) = result else {
+        return 124;
+    };
     if has(args, "--json") {
-        println!("{}", json::write(&s.event));
-    } else if let Some(t) = &s.text {
-        println!("{}", t);
+        println!("{}", json::write(&output.event));
+    } else if let Some(message) = output.text {
+        println!("{message}");
     }
     0
 }
 
-fn cmd_log(args: &[String]) -> i32 {
-    let event = opt(args, "--event").unwrap_or_default();
-    let turn = opt(args, "--turn").unwrap_or_else(|| "no-turn".to_string());
-    let now = index::now() as f64;
+fn cmd_hook(args: &[String]) -> i32 {
+    if !has(args, "--stdin-json") {
+        return 2;
+    }
+    let payload = match json::read(&read_stdin()) {
+        Ok(value) => value,
+        Err(_) => return 0,
+    };
+    let action = args.first().cloned();
+    match route::run_with_timeout(ROUTE_TIMEOUT, move || match action.as_deref() {
+        Some("activation" | "activate" | "ativacao") => lifecycle::record_activation(&payload),
+        Some("outcome" | "desfecho") => lifecycle::record_outcome(&payload),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "unknown hook action",
+        )),
+    }) {
+        Ok(Ok(_)) => 0,
+        Ok(Err(error)) if error.kind() == std::io::ErrorKind::InvalidInput => 2,
+        Ok(Err(_)) => 1,
+        Err(_) => 124,
+    }
+}
 
-    let v = match event.as_str() {
-        "activation" => {
-            let skill = opt(args, "--skill").unwrap_or_default();
-            if skill.is_empty() {
-                eprintln!("batuta log: --event activation requires --skill NAME");
+fn cmd_log(args: &[String]) -> i32 {
+    let event_type = option(args, "--event")
+        .or_else(|| option(args, "--evento"))
+        .unwrap_or_default();
+    let turn_id = option(args, "--turn-id")
+        .or_else(|| option(args, "--turn"))
+        .or_else(|| option(args, "--turno"))
+        .filter(|value| text::is_safe_correlation_id(value))
+        .or_else(route::fresh_turn_id)
+        .unwrap_or_else(|| "manual-unavailable".to_string());
+    let timestamp = index::now() as f64;
+    let event = match event_type.as_str() {
+        "activation" | "activate" | "ativacao" => {
+            let skill = option(args, "--skill").unwrap_or_default();
+            if !text::is_safe_skill_id(&skill) {
+                eprintln!("batuta log: activation requires a safe --skill NAME");
                 return 2;
             }
+            let version = option(args, "--version")
+                .or_else(|| option(args, "--versao"))
+                .unwrap_or_default();
+            let actor = option(args, "--actor")
+                .or_else(|| option(args, "--by"))
+                .or_else(|| option(args, "--por"))
+                .unwrap_or_else(|| "model".to_string());
             object(vec![
-                ("v", number(1)),
-                ("t", number(now)),
-                ("type", text("activation")),
-                ("turn", text(turn)),
-                ("skill", text(skill)),
-                ("version", text(opt(args, "--version").unwrap_or_default())),
-                (
-                    "by",
-                    text(opt(args, "--by").unwrap_or_else(|| "model".into())),
-                ),
+                ("schema", json_text("batuta.event.v2")),
+                ("v", number(2)),
+                ("t", number(timestamp)),
+                ("type", json_text("activation")),
+                ("turn_id", json_text(turn_id)),
+                ("skill", json_text(skill)),
+                ("version", json_text(version)),
+                ("actor", json_text(actor)),
+                ("authority", json_text("manual_observation")),
+                ("trusted", Value::Bool(false)),
+                ("receipt_verified", Value::Bool(false)),
             ])
         }
-        "outcome" => {
-            let ok = if has(args, "--failed") {
-                false
+        "outcome" | "desfecho" => {
+            let reported = if has(args, "--failed") || has(args, "--falhou") {
+                "failed"
+            } else if has(args, "--passed") || has(args, "--ok") {
+                "passed"
             } else {
-                has(args, "--ok")
+                "unknown"
             };
             object(vec![
-                ("v", number(1)),
-                ("t", number(now)),
-                ("type", text("outcome")),
-                ("turn", text(turn)),
-                ("ok", Value::Bool(ok)),
-                ("reprompt", number(optn(args, "--reprompt"))),
-                ("errors", number(optn(args, "--errors"))),
-                ("retries", number(optn(args, "--retries"))),
-                ("turns", number(optn(args, "--turns"))),
-                ("tokens_in", number(optn(args, "--tokens-in"))),
-                ("tokens_out", number(optn(args, "--tokens-out"))),
-                ("cost_usd", number(optn(args, "--cost"))),
+                ("schema", json_text("batuta.event.v2")),
+                ("v", number(2)),
+                ("t", number(timestamp)),
+                ("type", json_text("outcome")),
+                ("turn_id", json_text(turn_id)),
+                ("status", json_text("unknown")),
+                ("reported_status", json_text(reported)),
+                ("ok", Value::Bool(false)),
+                ("reprompt", number(numeric_option(args, &["--reprompt"]))),
                 (
-                    "source",
-                    text(opt(args, "--source").unwrap_or_else(|| "proxy".into())),
+                    "errors",
+                    number(numeric_option(args, &["--errors", "--erros"])),
                 ),
+                ("retries", number(numeric_option(args, &["--retries"]))),
+                (
+                    "turns",
+                    number(numeric_option(args, &["--turns", "--turnos"])),
+                ),
+                ("tokens_in", number(numeric_option(args, &["--tokens-in"]))),
+                (
+                    "tokens_out",
+                    number(numeric_option(args, &["--tokens-out"])),
+                ),
+                (
+                    "cost_usd",
+                    number(numeric_option(args, &["--cost", "--custo"])),
+                ),
+                ("authority", json_text("manual_observation")),
+                ("trusted", Value::Bool(false)),
+                ("receipt_verified", Value::Bool(false)),
             ])
         }
         _ => {
-            eprintln!("batuta log: --event has to be 'activation' or 'outcome'");
+            eprintln!("batuta log: --event must be 'activation' or 'outcome'");
             return 2;
         }
     };
-    record::append(&v);
-    0
+    match record::append(&event) {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("batuta log: could not append event: {error}");
+            1
+        }
+    }
+}
+
+fn requested_date(args: &[String]) -> Option<String> {
+    option(args, "--date")
+        .or_else(|| option(args, "--day"))
+        .or_else(|| option(args, "--dia"))
 }
 
 fn cmd_report(args: &[String]) -> i32 {
-    let events = record::load();
-    let day = opt(args, "--day");
-    let ag = record::aggregate(&events, day.as_deref());
+    let date = requested_date(args);
+    let aggregate = record::aggregate(&record::load(), date.as_deref());
     if has(args, "--json") {
-        let d = day.unwrap_or_else(|| data::day_utc(index::now()));
+        let date = date.unwrap_or_else(|| data::day_utc(index::now()));
         println!(
             "{}",
-            json::write(&record::daily_summary(&ag, &d, VERSION, "local"))
+            json::write(&record::daily_summary(&aggregate, &date, VERSION, "local"))
         );
     } else {
-        print!("{}", record::text_report(&ag));
+        print!("{}", record::text_report(&aggregate));
     }
     0
 }
 
 fn cmd_summary(args: &[String]) -> i32 {
-    let day = opt(args, "--day").unwrap_or_else(|| data::day_utc(index::now()));
-    let events = record::load();
-    let ag = record::aggregate(&events, Some(&day));
-    let cfg = home::read_config();
-    let v = record::daily_summary(&ag, &day, VERSION, "local");
-    println!("{}", json::write(&v));
-    if !cfg.upload {
-        eprintln!(
-            "\n(upload is OFF. What's above is only what would upload if you turned it on:\n \
-             `batuta config upload yes`. Note there's no prompt, no prompt hash,\n \
-             no file path — just per-skill counts.)"
-        );
+    let date = requested_date(args).unwrap_or_else(|| data::day_utc(index::now()));
+    let aggregate = record::aggregate(&record::load(), Some(&date));
+    println!(
+        "{}",
+        json::write(&record::daily_summary(&aggregate, &date, VERSION, "local"))
+    );
+    if !home::read_config().upload {
+        eprintln!("\n(upload is OFF. This is a preview containing aggregates only; no prompt, prompt hash, path, session ID, or turn ID.)");
     }
     0
 }
 
 fn cmd_find(args: &[String]) -> i32 {
-    let query = positional(args).unwrap_or_default();
-    print!("{}", find::find(&query));
+    print!("{}", find::find(&positional(args).unwrap_or_default()));
     0
 }
 
-fn cmd_conflicts(_args: &[String]) -> i32 {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| ".".into());
-    let folders = index::default_folders(&home::user_home(), &cwd);
-    let idx = index::build(&folders);
-    print!("{}", conflicts::report(&idx));
+fn cmd_conflicts() -> i32 {
+    let current = std::env::current_dir().unwrap_or_else(|_| ".".into());
+    let folders = index::default_folders(&home::user_home(), &current);
+    print!("{}", conflicts::report(&index::build(&folders)));
     0
 }
 
 fn cmd_config(args: &[String]) -> i32 {
-    let mut cfg = home::read_config();
-    let key = args.first().cloned();
-    let value = args.get(1).cloned();
-    match (key.as_deref(), value.as_deref()) {
-        (Some("upload"), Some(v)) => {
-            cfg.upload = v == "yes" || v == "true" || v == "1";
-            cfg.informed = true;
-            home::write_config(&cfg);
-            println!(
-                "upload = {}",
-                if cfg.upload {
-                    "yes (uploads the aggregated daily summary; never the prompt)"
-                } else {
-                    "no (nothing leaves this machine)"
-                }
-            );
+    let mut config = home::read_config();
+    match (
+        args.first().map(String::as_str),
+        args.get(1).map(String::as_str),
+    ) {
+        (Some("upload" | "envio"), Some(value)) => {
+            config.upload = matches!(value, "yes" | "sim" | "true" | "1");
+            config.informed = true;
         }
-        (Some("holdout"), Some(v)) | (Some("holdout_pct"), Some(v)) => {
-            cfg.holdout_pct = v.parse().unwrap_or(5).min(50);
-            home::write_config(&cfg);
-            println!("holdout_pct = {}%", cfg.holdout_pct);
+        (Some("holdout" | "holdout_pct"), Some(value)) => {
+            config.holdout_pct = value.parse().unwrap_or(5).min(50);
         }
-        (Some("portal"), Some(v)) => {
-            cfg.portal = v.to_string();
-            home::write_config(&cfg);
-            println!("portal = {}", cfg.portal);
-        }
+        (Some("portal"), Some(value)) => config.portal = value.to_string(),
         _ => {
-            println!("upload      = {}", if cfg.upload { "yes" } else { "no" });
-            println!("holdout_pct = {}", cfg.holdout_pct);
-            println!("portal      = {}", cfg.portal);
+            println!(
+                "upload       = {}",
+                if config.upload { "yes" } else { "no" }
+            );
+            println!("holdout_pct  = {}%", config.holdout_pct);
+            println!("portal       = {}", config.portal);
             println!("installation = {}", home::installation_id());
-            println!("\nfile: {}", home::app_dir().join("config.txt").display());
+            return 0;
         }
     }
+    if let Err(error) = home::write_config(&config) {
+        eprintln!("batuta config: {error}");
+        return 1;
+    }
+    println!("configuration updated");
     0
 }
 
 fn cmd_privacy() -> i32 {
-    let c = home::app_dir();
+    let directory = home::app_dir();
     println!(
-        "What Batuta keeps, on your machine, at {}:
-
-  salt           a random number created once, that never leaves here
-  index.txt      name, description and words of the skills you already have
-  events.jsonl   one line per turn: HASH of the prompt (with the salt), how many
-                 characters it had, how many terms were left, which skills
-                 were suggested, and whether you used one
-  config.txt     your preferences
-
-What does NOT get recorded anywhere: your prompt text, the model's response,
-your project's file name, your username, your machine.
-
-The prompt hash is made WITH the salt. Without the salt — which only exists
-here — nobody can test a guess against the hash. And the salt is never sent.
-
-Sending data is explicit opt-in (`batuta config upload yes`). Even when on, what
-uploads is the daily summary aggregated by skill: counts, no text. See it with
-your own eyes before deciding: `batuta summary`.
-
-Delete everything: rm -rf {}
-",
-        c.display(),
-        c.display()
+        "Batuta stores owner-only local state under {}:\n\n  salt          secure local salt, never uploaded\n  index.txt     local skill routing metadata\n  events.jsonl  route/activation/unknown-outcome observations\n  config.txt    preferences\n\nBatuta never persists prompt text, responses, project paths, session IDs, credentials,\nor secrets. Upload is opt-in and only sends an aggregate. LAB uses a separate signed,\nallowlisted event contract. Batuta measures behavior; it never proves delivery alone.\n\nDelete local state (irreversible): rm -rf {}",
+        directory.display(), directory.display()
     );
     0
 }
 
 fn cmd_hooks(args: &[String]) -> i32 {
-    let script = home::ensure_dir().join("user-prompt-submit.sh");
-    let body = include_str!("../../../hooks/user-prompt-submit.sh");
-    if let Err(e) = std::fs::write(&script, body) {
-        eprintln!("batuta: couldn't write {}: {}", script.display(), e);
-        return 1;
+    let hooks = [
+        (
+            "user-prompt-submit.sh",
+            include_str!("../../../hooks/user-prompt-submit.sh"),
+        ),
+        (
+            "post-tool-use.sh",
+            include_str!("../../../hooks/post-tool-use.sh"),
+        ),
+        ("stop.sh", include_str!("../../../hooks/stop.sh")),
+    ];
+    for (name, contents) in hooks {
+        let path = home::app_dir().join(name);
+        if let Err(error) = home::atomic_write(&path, contents.as_bytes(), 0o700) {
+            eprintln!("batuta: could not write {}: {error}", path.display());
+            return 1;
+        }
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755));
-    }
-
+    let directory = home::app_dir();
     let snippet = format!(
         r#"{{
   "hooks": {{
-    "UserPromptSubmit": [
-      {{ "hooks": [ {{ "type": "command", "command": "{}", "timeout": 5 }} ] }}
-    ]
+    "UserPromptSubmit": [{{ "hooks": [{{ "type": "command", "command": "{}", "timeout": 1 }}] }}],
+    "PostToolUse": [{{ "matcher": "Skill", "hooks": [{{ "type": "command", "command": "{}", "timeout": 1 }}] }}],
+    "Stop": [{{ "hooks": [{{ "type": "command", "command": "{}", "timeout": 1 }}] }}]
   }}
 }}"#,
-        script.display()
+        directory.join("user-prompt-submit.sh").display(),
+        directory.join("post-tool-use.sh").display(),
+        directory.join("stop.sh").display(),
     );
-
-    println!("Hook written to {}\n", script.display());
-    if has(args, "--apply") {
+    println!("Hooks written under {}\n", directory.display());
+    if has(args, "--apply") || has(args, "--aplicar") {
         println!(
-            "I still don't apply it to your settings.json by myself — touching your\n\
-             agent's configuration file without you seeing it is exactly the kind of\n\
-             thing Batuta doesn't do. Paste the snippet below yourself:\n"
+            "Batuta does not modify settings.json without review. Merge this block yourself:\n"
         );
     } else {
-        println!(
-            "Paste this into your ~/.claude/settings.json (merging with what's already there):\n"
-        );
+        println!("Merge this into ~/.claude/settings.json:\n");
     }
-    println!("{}\n", snippet);
-    println!("Then: `batuta index` once, and `batuta report` whenever you want to see the number.");
+    println!("{snippet}\n");
     0
 }

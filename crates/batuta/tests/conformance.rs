@@ -8,12 +8,13 @@
 //!   cargo test -- --test-threads=1
 
 use batuta::json::Value;
-use batuta::{bm25, home, index, json, record, route, sha256, text};
+use batuta::{bm25, home, index, json, record, route, sha256, storage, text};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
 static SETUP: Once = Once::new();
+static CORPUS: Once = Once::new();
 
 fn test_home() -> PathBuf {
     let base = std::env::temp_dir().join("batuta-conformance");
@@ -42,11 +43,9 @@ fn skill(root: &Path, name: &str, description: &str, body: &str) {
 fn corpus() -> PathBuf {
     let base = test_home();
     let root = base.join("skills");
-    if root.exists() {
-        return root;
-    }
-    fs::create_dir_all(&root).unwrap();
-    skill(&root, "systematic-debugging",
+    CORPUS.call_once(|| {
+      fs::create_dir_all(&root).unwrap();
+      skill(&root, "systematic-debugging",
         "Depuracao sistematica de bug dificil: reproduzir, isolar, diagnosticar e corrigir quando algo quebrou.",
         "Reproduza o defeito. Isole por bisseccao. Escreva o teste que falha. Corrija. Stack trace, excecao, crash, regressao, comportamento inesperado.");
     skill(
@@ -64,16 +63,22 @@ fn corpus() -> PathBuf {
     skill(&root, "traducao-tecnica",
         "Traduzir documentacao tecnica entre portugues, ingles e espanhol mantendo termo consagrado.",
         "Glossario, termo tecnico, consistencia terminologica, revisao bilingue.");
-    skill(&root, "stop-slop",
+      skill(&root, "stop-slop",
         "Cortar enchimento de texto gerado por IA: adverbio inutil, frase de efeito, conclusao que nao conclui.",
         "Texto inchado, chavao, redundancia, revisao de estilo, corte seco.");
+    });
     root
 }
 
 fn build_index() -> index::Index {
     let root = corpus();
     let idx = index::build(&[root]);
-    fs::write(home::ensure_dir().join("index.txt"), index::write(&idx)).unwrap();
+    storage::atomic_write(
+        &home::ensure_dir().join("index.txt"),
+        index::write(&idx).as_bytes(),
+        0o600,
+    )
+    .unwrap();
     idx
 }
 
@@ -349,7 +354,7 @@ fn c12_daily_summary_never_carries_a_raw_event() {
     assert_eq!(ag.routes, 1);
     assert_eq!(ag.routes_suggested, 1);
     assert_eq!(ag.skills.get("xlsx").unwrap().activations, 1);
-    assert_eq!(ag.suggested_arm, (1, 1));
+    assert_eq!(ag.suggested_arm, (0, 0));
 
     let v = record::daily_summary(&ag, "2025-08-24", "0.1.0", "hook");
     let s = json::write(&v);
@@ -361,7 +366,7 @@ fn c12_daily_summary_never_carries_a_raw_event() {
         !s.contains("\"turn\""),
         "the summary can't carry a turn id: {s}"
     );
-    assert!(s.contains("batuta.daily_summary.v1"));
+    assert!(s.contains("batuta.daily_summary.v2"));
     assert!(
         s.contains("declared_bias"),
         "the sample's bias always ships declared"

@@ -4,8 +4,9 @@
 works, at what cost, and on which model — and publishes everything, immutable,
 zero-profit.
 
-It's not the 27th router on the market. It's **the judge** — and it works with any
-router.
+It is not the 27th router on the market. Batuta is an **observability and
+measurement layer** that works with any router. It is never the sole proof that
+work was delivered, and it never judges its own telemetry.
 
 → [batuta.space](https://batuta.space) · [manifesto](MANIFESTO.md) · [the contract](SPEC.md)
 
@@ -23,7 +24,7 @@ have the money for an expensive model, and have no way to know what works.
 ## Install
 
 ```sh
-curl -fsSL https://batuta.space/instalar.sh | sh    # or: npm install -g batuta
+curl -fsSL https://batuta.space/install.sh | sh
 batuta index
 batuta install-hooks
 ```
@@ -32,37 +33,39 @@ After a few turns: `batuta report`.
 
 **Nothing leaves your machine.** The report works 100% offline; sending aggregated
 data is explicit opt-in. See [what gets logged](https://batuta.space/privacidade) or
-run `batuta privacidade`.
+run `batuta privacy`.
+
+> **npm safety:** the unscoped `batuta` package on npm belongs to an unrelated
+> publisher. Do not install it. The wrapper in this repository is intentionally
+> private until a verified `@filipecrocks/batuta` release exists. Use the
+> checksum-verified GitHub release installer above or build with Cargo.
 
 ## What's in here
 
 ```
 crates/batuta/        the hot-path Rust binary — no dependencies, no network
   src/                BM25 router, inverted index, event log
-  tests/              the CONFORMANCE BATTERY — 15 tests, the contract for ports
+  tests/              conformance and hardening tests — the contract for ports
 portal/               static Next.js (Vercel) — ranking, recipes, arena, records
-sql/                  Neon schema + the hash chain with an anti-edit trigger
-schema/               JSON Schema for the local event and the daily summary that gets uploaded
+sql/                  replay-safe Neon migrations, LAB events, and the hash chain
+schema/               JSON Schemas for private aggregates and signed LAB events
 bateria/v1/           24 frozen tasks with acceptance criteria written beforehand
 docs/PROTOCOLO.md     the Batuta Zero protocol and the judge's three laws
-script/cadeia.mjs     append, verify, and stamp the hash chain
+script/chain.mjs      append, verify, and stamp the hash chain
 npm/                  ten-line wrapper that downloads the binary
-hooks/                the UserPromptSubmit hook
-registros/            the published chain — verifiable by anyone
+hooks/                route, activation, and outcome lifecycle hooks
+adapters/lab/          reference trusted-runner adapter (no prompts or secrets)
+records/              the published chain — verifiable by anyone
 ```
 
-## Measured numbers
+## Reproducible performance claim
 
-Measured on 08/24/2026, not estimated:
-
-| | |
-|---|---|
-| indexing 506 skills | **91 ms** |
-| 50 routes (process startup included) | **136 ms** total, ~2.7 ms each |
-| index size | 397 KB |
-| conformance battery | 15 of 15 green |
-
-The hot-path budget is 100 ms per turn, with a hard ceiling of 300 ms.
+The committed claim is a budget, not a laptop-specific headline: the in-process
+route benchmark must remain below 50 ms per route for the frozen 500+ skill
+corpus, and hook execution has a real 300 ms wall-clock deadline. Run
+`script/benchmark.sh` to print the commit, toolchain, OS, CPU, build profile, and
+measured result. The benchmark does **not** claim to include process startup.
+See [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## The rules that aren't negotiable
 
@@ -71,7 +74,7 @@ The hot-path budget is 100 ms per turn, with a hard ceiling of 300 ms.
    salt is never sent.
 3. **The binary never touches the network.** The wrapper handles networking.
 4. **Silence over noise.** A false positive costs more than a false negative.
-5. **The judge is blind, is not the defendant, and is versioned.**
+5. **The judge is blind, independent from the subject model, and versioned.**
 6. **A control group exists.** 5% of turns have the router deliberately silenced —
    declared, configurable, and can be turned off.
 7. **The chain cannot be edited.** Every result carries the previous one's hash, and
@@ -96,8 +99,8 @@ numbers.
 
 ```sh
 cd crates/batuta
-cargo test -- --test-threads=1     # the battery shares one temp home directory
-cargo clippy --all-targets -- -D warnings
+cargo test --locked --all-features
+cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo fmt --check
 ```
 

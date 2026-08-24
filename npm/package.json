@@ -1,8 +1,9 @@
 {
-  "name": "batuta",
+  "name": "@filipecrocks/batuta",
   "version": "0.1.0",
-  "description": "Open measurement layer for Agent Skills — measures whether a skill works, at what cost, on which model. Local, in milliseconds.",
-  "//": "os and cpu are left FREE on purpose: postinstall is what decides the target and states plainly which platform has no binary. Locking it here would just trade a clear message for an EBADPLATFORM.",
+  "private": true,
+  "description": "Open Agent Skills measurement layer: local routing and observation in milliseconds.",
+  "//": "Private until the verified @filipecrocks scope is deliberately published. The unrelated unscoped npm package named batuta must never be used.",
   "bin": {
     "batuta": "bin/batuta.js"
   },
@@ -33,5 +34,9 @@
   },
   "engines": {
     "node": ">=16"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

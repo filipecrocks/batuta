@@ -20,16 +20,34 @@ use crate::text;
 use std::collections::BTreeMap;
 
 pub fn registry_path() -> std::path::PathBuf {
-    home::app_dir().join("registry.json")
+    let canonical = home::app_dir().join("registry.json");
+    if canonical.is_file() {
+        canonical
+    } else {
+        home::app_dir().join("registro.json")
+    }
+}
+
+fn field_text<'a>(value: &'a json::Value, canonical: &str, legacy: &str) -> &'a str {
+    let current = value.field(canonical).text();
+    if current.is_empty() {
+        value.field(legacy).text()
+    } else {
+        current
+    }
 }
 
 fn index_from_registry(v: &json::Value) -> (Index, Vec<json::Value>) {
     let mut idx = Index::default();
     let mut originals = Vec::new();
-    for (i, s) in v.field("skills").items().iter().enumerate() {
-        let name = s.field("name").text().to_string();
-        let description = s.field("description").text().to_string();
-        let body = s.field("body").text().to_string();
+    for skill in v.field("skills").items() {
+        let name = field_text(skill, "name", "nome").to_string();
+        if !text::is_safe_skill_id(&name) {
+            continue;
+        }
+        let description = field_text(skill, "description", "descricao").to_string();
+        let body = field_text(skill, "body", "corpo").to_string();
+        let document_id = idx.skills.len() as u32;
         let mut bag = Vec::new();
         for _ in 0..3 {
             bag.extend(text::terms(&name));
@@ -44,17 +62,17 @@ fn index_from_registry(v: &json::Value) -> (Index, Vec<json::Value>) {
             *tf.entry(t).or_insert(0) += 1;
         }
         for (t, c) in tf {
-            idx.postings.entry(t).or_default().push((i as u32, c));
+            idx.postings.entry(t).or_default().push((document_id, c));
         }
         idx.skills.push(Skill {
             name,
-            version: s.field("version").text().to_string(),
+            version: field_text(skill, "version", "versao").to_string(),
             description,
-            path: s.field("source").text().to_string(),
+            path: field_text(skill, "source", "fonte").to_string(),
             source: "registry".to_string(),
             size,
         });
-        originals.push(s.clone());
+        originals.push(skill.clone());
     }
     let total: usize = idx.skills.iter().map(|s| s.size).sum();
     idx.avg_size = if idx.skills.is_empty() {
@@ -78,7 +96,13 @@ pub fn find(query: &str) -> String {
     // ---- 1. installed
     s.push_str("INSTALLED — already on your machine\n");
     let mut found_local = false;
-    if let Ok(raw) = std::fs::read_to_string(home::app_dir().join("index.txt")) {
+    let canonical_index = home::app_dir().join("index.txt");
+    let local_index = if canonical_index.is_file() {
+        canonical_index
+    } else {
+        home::app_dir().join("indice.txt")
+    };
+    if let Ok(raw) = std::fs::read_to_string(local_index) {
         let idx = index::read_partial(&raw, &terms);
         let matches = bm25::score(&idx, &terms);
         for a in &matches {
@@ -161,9 +185,19 @@ pub fn find(query: &str) -> String {
 }
 
 fn shorten(s: &str, n: usize) -> String {
-    let c: Vec<char> = s.chars().collect();
+    let safe: String = s
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect();
+    let c: Vec<char> = safe.chars().collect();
     if c.len() <= n {
-        s.to_string()
+        safe
     } else {
         c[..n].iter().collect::<String>() + "…"
     }

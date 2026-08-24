@@ -1,17 +1,6 @@
-# Publica os binarios do Batuta quando uma tag v* e empurrada.
-#
-# Regra da casa: o binario tem zero dependencia, zero async, zero rede. Isso torna
-# a compilacao cruzada facil — nao ha nenhuma lib C para achar.
-#
-# ESCOLHA PARA aarch64-unknown-linux-musl: gcc-aarch64-linux-gnu, NAO cross.
-#   1. `cross` roda o build dentro de um container montando so a raiz do projeto
-#      Cargo (aqui: crates/batuta). O main.rs faz
-#      include_str!("../../../hooks/user-prompt-submit.sh") — arquivo que mora
-#      FORA do crate. Dentro do container esse caminho nao existe e o build quebra.
-#   2. Como nao existe codigo C no projeto, o gcc cruzado e usado apenas como
-#      driver de link; a libc musl estatica vem do proprio rust-std (musl faz
-#      crt-static e link self-contained por padrao). Resultado: binario estatico
-#      de verdade, sem docker, sem toolchain de terceiro.
+# Build release binaries when a v* tag is pushed. Third-party actions and the
+# Rust toolchain are immutable pins. Both Linux targets use Rust's self-contained
+# musl linker and are checked for accidental dynamic linkage before packaging.
 name: release
 
 on:
@@ -20,63 +9,70 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
   MANIFESTO: crates/batuta/Cargo.toml
 
 jobs:
-  compilar:
-    name: compilar ${{ matrix.alvo }}
+  build:
+    name: build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - alvo: x86_64-unknown-linux-musl
-            runner: ubuntu-latest
-          - alvo: aarch64-unknown-linux-musl
-            runner: ubuntu-latest
-          - alvo: x86_64-apple-darwin
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - target: x86_64-apple-darwin
             runner: macos-13
-          - alvo: aarch64-apple-darwin
+          - target: aarch64-apple-darwin
             runner: macos-14
-          - alvo: x86_64-pc-windows-msvc
-            runner: windows-latest
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Toolchain Rust + alvo
+      - name: Install pinned Rust target
         shell: bash
         run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-          rustup target add ${{ matrix.alvo }}
+          rustup toolchain install 1.93.1 --profile minimal --no-self-update
+          rustup default 1.93.1
+          rustup target add ${{ matrix.target }}
+          rustc --version --verbose
 
-      # musl-tools da o musl-gcc do x86_64; gcc-aarch64-linux-gnu da o linker do aarch64.
-      - name: Linkers do Linux
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y musl-tools gcc-aarch64-linux-gnu
-
-      - name: Compilar release
+      - name: Build release
         shell: bash
         env:
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
-        run: cargo build --release --locked --manifest-path "$MANIFESTO" --target ${{ matrix.alvo }}
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: rust-lld
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: rust-lld
+        run: cargo build --release --locked --manifest-path "$MANIFESTO" --target ${{ matrix.target }}
 
-      - name: Empacotar (tar.gz + SHA256)
+      - name: Verify static Linux artifact
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact="crates/batuta/target/${{ matrix.target }}/release/batuta"
+          file "$artifact" | tee artifact-file.txt
+          ! file "$artifact" | grep -Eqi 'dynamically linked|interpreter'
+
+      - name: Package tar.gz and checksum
         if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p entrega
-          cp crates/batuta/target/${{ matrix.alvo }}/release/batuta entrega/batuta
+          cp crates/batuta/target/${{ matrix.target }}/release/batuta entrega/batuta
           chmod 755 entrega/batuta
-          nome="batuta-${{ matrix.alvo }}.tar.gz"
+          nome="batuta-${{ matrix.target }}.tar.gz"
           tar -czf "$nome" -C entrega batuta
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "$nome" > "$nome.sha256"
@@ -85,42 +81,49 @@ jobs:
           fi
           cat "$nome.sha256"
 
-      - name: Empacotar (zip + SHA256)
+      - name: Package zip and checksum
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path entrega | Out-Null
-          Copy-Item "crates/batuta/target/${{ matrix.alvo }}/release/batuta.exe" entrega/batuta.exe
-          $nome = "batuta-${{ matrix.alvo }}.zip"
+          Copy-Item "crates/batuta/target/${{ matrix.target }}/release/batuta.exe" entrega/batuta.exe
+          $nome = "batuta-${{ matrix.target }}.zip"
           Compress-Archive -Path entrega/batuta.exe -DestinationPath $nome -Force
           $h = (Get-FileHash -Algorithm SHA256 $nome).Hash.ToLower()
-          # Formato coreutils (dois espacos) para o `sha256sum -c` do job final aceitar.
+          # Coreutils format (two spaces), checked by the publication job.
           [IO.File]::WriteAllText((Join-Path $PWD "$nome.sha256"), "$h  $nome`n")
           Get-Content "$nome.sha256"
 
-      - uses: actions/upload-artifact@v4
+      - name: Attest release archive provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          name: pacote-${{ matrix.alvo }}
+          subject-path: batuta-${{ matrix.target }}.*
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: package-${{ matrix.target }}
           path: |
-            batuta-${{ matrix.alvo }}.tar.gz*
-            batuta-${{ matrix.alvo }}.zip*
+            batuta-${{ matrix.target }}.tar.gz*
+            batuta-${{ matrix.target }}.zip*
           if-no-files-found: error
           retention-days: 7
 
-  publicar:
-    name: publicar release
-    needs: compilar
-    runs-on: ubuntu-latest
+  publish:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: entrega
           merge-multiple: true
 
-      - name: Consolidar SHA256SUMS
+      - name: Consolidate SHA256SUMS
         shell: bash
         run: |
           set -euo pipefail
@@ -128,12 +131,10 @@ jobs:
           ls -la
           cat ./*.sha256 | sort -k2 > SHA256SUMS
           rm -f ./*.sha256
-          echo "--- SHA256SUMS ---"
           cat SHA256SUMS
-          # Se um hash nao bater aqui, nao existe release.
           sha256sum -c SHA256SUMS
 
-      - name: Criar o GitHub Release
+      - name: Create GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

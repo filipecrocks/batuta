@@ -48,9 +48,10 @@ fi
 download() {
     # download <url> <destination>
     if [ "$DOWNLOADER" = curl ]; then
-        curl -fsSL --proto '=https' --tlsv1.2 -o "$2" "$1" || return 1
+        curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 30 \
+            --max-filesize 67108864 -o "$2" "$1" || return 1
     else
-        wget -q -O "$2" "$1" || return 1
+        wget -q --https-only --timeout=30 -O "$2" "$1" || return 1
     fi
 }
 
@@ -82,8 +83,8 @@ case "$OS_NAME" in
     Linux)  OS="unknown-linux-musl" ;;
     Darwin) OS="apple-darwin" ;;
     MINGW*|MSYS*|CYGWIN*|Windows_NT)
-        die "on Windows use npm:  npm install -g batuta
-       (or download the .zip at https://github.com/$REPO/releases)" ;;
+        die "on Windows download the checksum-verified .zip at https://github.com/$REPO/releases.
+       The unrelated unscoped npm package named batuta must not be installed." ;;
     *)
         die "system '$OS_NAME' has no prebuilt binary.
        Build it by hand:  cargo install --path crates/batuta" ;;

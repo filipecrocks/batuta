@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batuta.space/schema/daily-summary.v2.schema.json",
+  "title": "Batuta daily aggregate v2",
+  "description": "Upload-only aggregate. It contains no prompt text/hash, turn/session/run identifier, path, response, transcript, credential, or secret.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "date", "installation_id", "batuta_version", "mode", "routes", "routes_with_suggestions", "holdout_routes", "treatment_arm", "holdout_arm", "declared_bias", "measurement_disclaimer", "skills"],
+  "properties": {
+    "schema": { "const": "batuta.daily_summary.v2" },
+    "date": { "type": "string", "format": "date" },
+    "installation_id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "batuta_version": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "mode": { "type": "string", "minLength": 1, "maxLength": 50 },
+    "routes": { "$ref": "#/$defs/count" },
+    "routes_with_suggestions": { "$ref": "#/$defs/count" },
+    "holdout_routes": { "$ref": "#/$defs/count" },
+    "treatment_arm": { "$ref": "#/$defs/arm" },
+    "holdout_arm": { "$ref": "#/$defs/arm" },
+    "declared_bias": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "measurement_disclaimer": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "skills": { "type": "array", "maxItems": 5000, "items": { "$ref": "#/$defs/skill" } }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "arm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "total"],
+      "properties": { "passed": { "$ref": "#/$defs/count" }, "total": { "$ref": "#/$defs/count" } }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skill", "version", "routes", "activations", "user_activations", "judged_turns", "successful_turns", "reprompts", "errors", "retries", "tokens_in", "tokens_out", "cost_usd", "median_turns_to_finish", "ghost"],
+      "properties": {
+        "skill": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,127}$" },
+        "version": { "type": "string", "maxLength": 100 },
+        "routes": { "$ref": "#/$defs/count" },
+        "activations": { "$ref": "#/$defs/count" },
+        "user_activations": { "$ref": "#/$defs/count" },
+        "judged_turns": { "$ref": "#/$defs/count" },
+        "successful_turns": { "$ref": "#/$defs/count" },
+        "reprompts": { "$ref": "#/$defs/count" },
+        "errors": { "$ref": "#/$defs/count" },
+        "retries": { "$ref": "#/$defs/count" },
+        "tokens_in": { "type": "number", "minimum": 0 },
+        "tokens_out": { "type": "number", "minimum": 0 },
+        "cost_usd": { "type": "number", "minimum": 0 },
+        "median_turns_to_finish": { "type": "number", "minimum": 0 },
+        "ghost": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -46,6 +46,11 @@ export function hasDb(): boolean {
   return connection() !== null;
 }
 
+/** Canonical descriptive alias used by write paths; retained `hasDb` keeps API compatibility. */
+export function hasDatabase(): boolean {
+  return hasDb();
+}
+
 /**
  * Parameterized tagged template (`sql\`select ... where day = ${day}\``). The values
  * become $1, $2… in the driver: there is no string-concatenation path in this

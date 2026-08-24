@@ -13,6 +13,21 @@
 /// Prefix indexed alongside the exact term for words above this length.
 pub const PREFIX_LEN: usize = 5;
 
+/// Identifiers are the only index-controlled values allowed across the prompt boundary.
+pub fn is_safe_skill_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.bytes().enumerate().all(|(index, byte)| {
+            byte.is_ascii_alphanumeric()
+                || (index > 0
+                    && matches!(byte, b'.' | b'_' | b':' | b'@' | b'/' | b'+' | b'~' | b'-'))
+        })
+}
+
+pub fn is_safe_correlation_id(value: &str) -> bool {
+    is_safe_skill_id(value)
+}
+
 const GLUE_WORDS: &[&str] = &[
     // portuguese
     "a", "ao", "aos", "as", "ate", "com", "como", "da", "das", "de", "dele", "dela", "deles", "do",

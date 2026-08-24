@@ -22,6 +22,8 @@ const pkg = require("./package.json");
 const REPO = "filipecrocks/batuta";
 const TAG = process.env.BATUTA_VERSION || "v" + pkg.version;
 const BASE = "https://github.com/" + REPO + "/releases/download/" + TAG;
+const MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
+const DOWNLOAD_TIMEOUT_MS = 30_000;
 
 const TARGETS = {
   "linux-x64": "x86_64-unknown-linux-musl",
@@ -42,8 +44,10 @@ function download(url, hops) {
   hops = hops === undefined ? 6 : hops;
   return new Promise(function (ok, err) {
     if (hops < 0) return err(new Error("too many redirects: " + url));
-    https
-      .get(url, { headers: { "user-agent": "batuta-npm/" + pkg.version } }, function (res) {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return err(new Error("refusing non-HTTPS URL: " + url));
+    const request = https
+      .get(parsed, { headers: { "user-agent": "batuta-npm/" + pkg.version } }, function (res) {
         const s = res.statusCode;
         if (s >= 300 && s < 400 && res.headers.location) {
           res.resume();
@@ -53,12 +57,28 @@ function download(url, hops) {
           res.resume();
           return err(new Error("HTTP " + s + " at " + url));
         }
+        const declared = Number(res.headers["content-length"] || "0");
+        if (declared > MAX_DOWNLOAD_BYTES) {
+          res.destroy(new Error("release download exceeds 64 MiB"));
+          return;
+        }
+        let received = 0;
         const chunks = [];
-        res.on("data", function (d) { chunks.push(d); });
+        res.on("data", function (d) {
+          received += d.length;
+          if (received > MAX_DOWNLOAD_BYTES) {
+            res.destroy(new Error("release download exceeds 64 MiB"));
+            return;
+          }
+          chunks.push(d);
+        });
         res.on("end", function () { ok(Buffer.concat(chunks)); });
         res.on("error", err);
-      })
-      .on("error", err);
+      });
+    request.setTimeout(DOWNLOAD_TIMEOUT_MS, function () {
+      request.destroy(new Error("release download timed out"));
+    });
+    request.on("error", err);
   });
 }
 
@@ -85,7 +105,7 @@ function readTar(buf, target) {
 }
 
 function readTarGz(buf, target) {
-  return readTar(zlib.gunzipSync(buf), target);
+  return readTar(zlib.gunzipSync(buf, { maxOutputLength: MAX_DOWNLOAD_BYTES }), target);
 }
 
 // Reads a zip via its central directory and returns the content of the requested entry.
@@ -113,7 +133,7 @@ function readZip(buf, target) {
       const start = localOffset + 30 + ln + le;
       const raw = buf.slice(start, start + compSize);
       if (method === 0) return raw;
-      if (method === 8) return zlib.inflateRawSync(raw);
+      if (method === 8) return zlib.inflateRawSync(raw, { maxOutputLength: MAX_DOWNLOAD_BYTES });
       throw new Error("zip with compression " + method + ", which I don't read");
     }
     p += 46 + nameLen + extraLen + commentLen;
@@ -190,13 +210,21 @@ async function main() {
 
   const vendorDir = path.join(__dirname, "vendor");
   const destination = path.join(vendorDir, binName);
+  const tmp = path.join(vendorDir, "." + binName + "." + process.pid);
   try {
-    fs.mkdirSync(vendorDir, { recursive: true });
-    const tmp = path.join(vendorDir, "." + binName + "." + process.pid);
-    fs.writeFileSync(tmp, bin, { mode: 0o755 });
+    fs.mkdirSync(vendorDir, { recursive: true, mode: 0o700 });
+    if (process.platform !== "win32") fs.chmodSync(vendorDir, 0o700);
+    const descriptor = fs.openSync(tmp, "wx", 0o700);
+    try {
+      fs.writeFileSync(descriptor, bin);
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
     fs.renameSync(tmp, destination);
-    fs.chmodSync(destination, 0o755);
+    fs.chmodSync(destination, 0o700);
   } catch (e) {
+    try { fs.unlinkSync(tmp); } catch {}
     die("could not write " + destination + ": " + e.message);
   }
 

@@ -16,9 +16,11 @@ pub mod find;
 pub mod home;
 pub mod index;
 pub mod json;
+pub mod lifecycle;
 pub mod record;
 pub mod route;
 pub mod sha256;
+pub mod storage;
 pub mod text;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -1,6 +1,6 @@
 # SPEC — the hot-path contract
 
-This document and `crates/batuta/tests/conformidade.rs` are **the contract**. A port
+This document and `crates/batuta/tests/conformance.rs` are **the contract**. A port
 to another language is conformant when it passes the battery with the exact same
 numbers — not with similar numbers.
 
@@ -15,7 +15,7 @@ Everything else is a skill — and like any skill, it gets measured.**
 
 | | hot path | cold path |
 |---|---|---|
-| commands | `route`, `log`, `index` | `report`, `resumo`, `find`, `conflicts` |
+| commands | `route`, `log`, `index` | `report`, `summary`, `find`, `conflicts` |
 | network | **forbidden** | allowed (but not in the binary — see §7) |
 | LLM | **forbidden** | allowed |
 | budget | 100ms, hard ceiling 300ms | no budget |
@@ -190,14 +190,18 @@ killing reprompts.
 | c14 | UTC dates |
 | c15 | 506 skills within budget |
 
-Measured on 08/24/2026, on this machine: **506 skills indexed in 91ms**, **50
-routes in 136ms total** (~2.7ms per route, process startup included), 397 KB index.
+The reproducible contract is a release-build route average below 50 ms over the
+frozen 500+ skill corpus, with an independent 300 ms hook deadline. Run
+`script/benchmark.sh`; it records the commit, dirty state, toolchain, OS, CPU,
+architecture, profile, and measured result. The benchmark is explicitly
+in-process and does not claim process-startup coverage. Historical ad-hoc numbers
+without that metadata are not product claims.
 
 ## 11. What v0.1 in Node taught us
 
-The algorithm ran in 2ms. **Node process startup was ~200ms** — on its own, that
-blew the hook's budget. Hence the static Rust binary (startup of 1 to 3ms) and the
-npm package as a thin wrapper.
+An early Node prototype showed that process startup could dominate the algorithm,
+which motivated the static Rust hot path. That historical observation was not a
+controlled benchmark; use the committed benchmark script for current claims.
 
 If 300ms ever isn't enough, plan B is a daemon with a unix socket. It's plan B, not
 plan A.

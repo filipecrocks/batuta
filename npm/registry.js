@@ -19,10 +19,13 @@ const os = require("os");
 const path = require("path");
 const https = require("https");
 
-const SOURCE = process.env.BATUTA_REGISTRY_URL || "https://batuta.space/registry.json";
+const SOURCE = process.env.BATUTA_REGISTRY_URL || process.env.BATUTA_REGISTRO_URL || "https://batuta.space/registry.json";
+const MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024;
+const DOWNLOAD_TIMEOUT_MS = 10_000;
 
 function appDir() {
   if (process.env.BATUTA_HOME) return process.env.BATUTA_HOME;
+  if (process.env.BATUTA_CASA) return process.env.BATUTA_CASA;
   return path.join(process.env.HOME || process.env.USERPROFILE || os.homedir(), ".batuta");
 }
 
@@ -39,8 +42,10 @@ function download(url, hops) {
   hops = hops === undefined ? 6 : hops;
   return new Promise(function (ok, err) {
     if (hops < 0) return err(new Error("too many redirects: " + url));
-    https
-      .get(url, { headers: { "user-agent": "batuta-registry" } }, function (res) {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return err(new Error("refusing non-HTTPS URL: " + url));
+    const request = https
+      .get(parsed, { headers: { "user-agent": "batuta-registry" } }, function (res) {
         const s = res.statusCode;
         if (s >= 300 && s < 400 && res.headers.location) {
           res.resume();
@@ -50,12 +55,28 @@ function download(url, hops) {
           res.resume();
           return err(new Error("HTTP " + s + " at " + url));
         }
+        const declared = Number(res.headers["content-length"] || "0");
+        if (declared > MAX_DOWNLOAD_BYTES) {
+          res.destroy(new Error("registry exceeds 5 MiB"));
+          return;
+        }
+        let received = 0;
         const chunks = [];
-        res.on("data", function (d) { chunks.push(d); });
+        res.on("data", function (d) {
+          received += d.length;
+          if (received > MAX_DOWNLOAD_BYTES) {
+            res.destroy(new Error("registry exceeds 5 MiB"));
+            return;
+          }
+          chunks.push(d);
+        });
         res.on("end", function () { ok(Buffer.concat(chunks)); });
         res.on("error", err);
-      })
-      .on("error", err);
+      });
+    request.setTimeout(DOWNLOAD_TIMEOUT_MS, function () {
+      request.destroy(new Error("registry download timed out"));
+    });
+    request.on("error", err);
   });
 }
 
@@ -79,12 +100,22 @@ async function update() {
     return 1;
   }
 
+  let temporary;
   try {
-    fs.mkdirSync(appDir(), { recursive: true });
-    const tmp = destination + "." + process.pid;
-    fs.writeFileSync(tmp, body);
-    fs.renameSync(tmp, destination);
+    fs.mkdirSync(appDir(), { recursive: true, mode: 0o700 });
+    if (process.platform !== "win32") fs.chmodSync(appDir(), 0o700);
+    temporary = destination + ".tmp-" + process.pid + "-" + Date.now();
+    const descriptor = fs.openSync(temporary, "wx", 0o600);
+    try {
+      fs.writeFileSync(descriptor, body);
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    fs.renameSync(temporary, destination);
+    if (process.platform !== "win32") fs.chmodSync(destination, 0o600);
   } catch (e) {
+    if (temporary) try { fs.unlinkSync(temporary); } catch {}
     process.stderr.write("\n  batuta registry: could not write " + destination + ": " + e.message + "\n\n");
     return 1;
   }
@@ -96,6 +127,7 @@ async function update() {
 function run(args) {
   const sub = args[0];
   if (sub === "update" || sub === "atualizar") {
+    if (sub === "atualizar") process.stderr.write("batuta: warning: 'atualizar' is deprecated; use 'update'\n");
     update().then(function (c) { process.exit(c); });
     return;
   }
