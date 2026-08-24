@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batuta.space/schema/evento.schema.json",
+  "title": "Evento local do Batuta (~/.batuta/eventos.jsonl)",
+  "description": "FORMATO LOCAL. NUNCA SOBE. Este é o arquivo que fica em ~/.batuta/eventos.jsonl, uma linha JSON por evento, e ele não tem endereço de destino: nenhum comando do Batuta envia evento cru para lugar nenhum, nem com opt-in ligado. O que sobe é exclusivamente o agregado de schema/resumo-diario.schema.json. Está documentado aqui porque o formato é público e auditável — quem instala o Batuta tem direito de ler, campo a campo, o que a ferramenta escreve na própria máquina. Consequência prática: o endpoint de ingestão do portal recusa, com 400, qualquer corpo que contenha as chaves 'prompt', 'prompt_hash', 'turno' ou 'texto' em qualquer nível — se um evento cru chegou lá, é bug do cliente, não dado novo. Gerado por crates/batuta/src/rota.rs (tipo 'rota') e crates/batuta/src/main.rs, cmd_log (tipos 'ativacao' e 'desfecho').",
+  "type": "object",
+  "required": ["v", "t", "tipo", "turno"],
+  "properties": {
+    "v": { "const": 1, "description": "Versão do formato de evento." },
+    "t": { "type": "integer", "minimum": 0, "description": "Epoch em segundos, UTC." },
+    "tipo": { "enum": ["rota", "ativacao", "desfecho"] },
+    "turno": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Amarra os três sinais do mesmo turno (§4.4). Default no roteador: prompt_hash[..12] — logo, é dado local e não sobe."
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/rota" },
+    { "$ref": "#/$defs/ativacao" },
+    { "$ref": "#/$defs/desfecho" }
+  ],
+  "$defs": {
+    "rota": {
+      "title": "rota — a proposta do Batuta",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "tipo", "turno", "prompt_hash", "prompt_len", "termos", "holdout", "modo", "batuta_versao", "ms", "sugestoes"],
+      "properties": {
+        "v": { "const": 1 },
+        "t": { "type": "integer", "minimum": 0 },
+        "tipo": { "const": "rota" },
+        "turno": { "type": "string", "minLength": 1 },
+        "prompt_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "description": "sha256(sal_local || prompt)[..32]. O sal nunca sai da máquina, então nem o dono do arquivo consegue testar um palpite de prompt contra o hash de outra máquina. Mesmo assim: este campo não sobe."
+        },
+        "prompt_len": { "type": "integer", "minimum": 0, "description": "Comprimento em caracteres. Tamanho, não conteúdo." },
+        "termos": { "type": "integer", "minimum": 0, "description": "Quantidade de termos após tokenização." },
+        "holdout": { "type": "boolean", "description": "Turno sorteado para o roteador se calar. Sorteio determinístico a partir do sal + prompt: a mesma pergunta cai sempre no mesmo braço, então não dá para tentar de novo até o roteador falar." },
+        "modo": { "enum": ["hook", "mcp", "skill"], "description": "Transporte (§4.1). 'mcp' e 'skill' são funis incompletos e viram 'degradado' no agregado." },
+        "batuta_versao": { "type": "string", "minLength": 1 },
+        "ms": { "type": "number", "minimum": 0, "description": "Tempo da rota. Orçamento 100ms, teto duro 300ms." },
+        "sugestoes": {
+          "type": "array",
+          "description": "Vazio quando o roteador se calou — por holdout ou por não haver casamento acima do corte de ruído (2.0). Silêncio é resultado, não falha.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["skill", "versao", "nota"],
+            "properties": {
+              "skill": { "type": "string", "minLength": 1 },
+              "versao": { "type": "string" },
+              "nota": { "type": "number", "description": "Pontuação BM25 (K1=1.5, B=0.75), arredondada a 2 casas." }
+            }
+          }
+        }
+      }
+    },
+    "ativacao": {
+      "title": "ativacao — o disparo real",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "tipo", "turno", "skill", "versao", "por"],
+      "properties": {
+        "v": { "const": 1 },
+        "t": { "type": "integer", "minimum": 0 },
+        "tipo": { "const": "ativacao" },
+        "turno": { "type": "string", "minLength": 1 },
+        "skill": { "type": "string", "minLength": 1 },
+        "versao": { "type": "string" },
+        "por": {
+          "enum": ["modelo", "usuario"],
+          "description": "Quem disparou. Separado porque skill que só dispara quando o usuário manda não foi roteada — foi pedida."
+        }
+      }
+    },
+    "desfecho": {
+      "title": "desfecho — este turno terminou bem?",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "tipo", "turno", "ok", "reprompt", "erros", "retries", "turnos", "tokens_in", "tokens_out", "custo_usd", "fonte"],
+      "properties": {
+        "v": { "const": 1 },
+        "t": { "type": "integer", "minimum": 0 },
+        "tipo": { "const": "desfecho" },
+        "turno": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean", "description": "Ausência de --ok e de --falhou grava false: na dúvida o turno não conta como sucesso." },
+        "reprompt": { "type": "number", "minimum": 0 },
+        "erros": { "type": "number", "minimum": 0 },
+        "retries": { "type": "number", "minimum": 0 },
+        "turnos": { "type": "number", "minimum": 0, "description": "Turnos até o fim da tarefa. Vira a mediana do agregado." },
+        "tokens_in": { "type": "number", "minimum": 0 },
+        "tokens_out": { "type": "number", "minimum": 0 },
+        "custo_usd": { "type": "number", "minimum": 0 },
+        "fonte": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Quem disse que terminou bem: 'proxy' (reprompt/erro/retry, duro e barato), 'voto' (uma tecla do usuário) ou 'juiz' (lote noturno, cego e versionado). Juiz é sinal, nunca verdade única.",
+          "examples": ["proxy", "voto", "juiz"]
+        }
+      }
+    }
+  }
+}

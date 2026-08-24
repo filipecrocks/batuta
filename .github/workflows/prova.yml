@@ -1,0 +1,54 @@
+# A prova: todo push e todo PR passam por aqui. Falhou, nao passa.
+#
+# `cargo test -- --test-threads=1` nao e manha nem superstição: a bateria de
+# conformidade (crates/batuta/tests/conformidade.rs) monta UMA casa temporaria
+# compartilhada e aponta o binario para ela com std::env::set_var("BATUTA_CASA", ...).
+# Variavel de ambiente e estado global do processo — com varias threads, um teste
+# troca a casa debaixo do outro e os numeros do contrato saem errados. Uma thread so.
+name: prova
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    working-directory: crates/batuta
+
+jobs:
+  prova:
+    name: fmt + clippy + bateria
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default stable
+          rustc --version && cargo --version
+
+      - name: Cache do cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/batuta/target
+          key: prova-${{ runner.os }}-${{ hashFiles('crates/batuta/Cargo.lock') }}
+          restore-keys: prova-${{ runner.os }}-
+
+      - name: Formatacao
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Bateria de conformidade (uma thread so)
+        run: cargo test --locked -- --test-threads=1

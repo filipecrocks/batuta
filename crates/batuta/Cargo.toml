@@ -1,0 +1,28 @@
+[package]
+name = "batuta"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+description = "Camada aberta de medicao de Agent Skills — caminho quente: roteia e registra, local, em milissegundos."
+license = "MIT"
+repository = "https://github.com/filipecrocks/batuta"
+homepage = "https://batuta.space"
+
+# Lei do projeto: o binario do caminho quente nao tem dependencia, nao tem async,
+# nao tem rede. Se um dia precisar de alguma das tres, e porque saiu do caminho quente.
+[dependencies]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[lib]
+name = "batuta"
+path = "src/lib.rs"
+
+[[bin]]
+name = "batuta"
+path = "src/main.rs"

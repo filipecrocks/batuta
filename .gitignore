@@ -1,0 +1,11 @@
+target/
+node_modules/
+.next/
+.vercel/
+.env
+.env.*
+!.env.exemplo
+*.tar.gz
+*.zip
+npm/vendor/
+.DS_Store

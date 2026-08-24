@@ -1,0 +1,37 @@
+{
+  "name": "batuta",
+  "version": "0.1.0",
+  "description": "Camada aberta de medicao de Agent Skills — mede se a skill funciona, a que custo, em qual modelo. Local, em milissegundos.",
+  "//": "os e cpu ficam LIVRES de proposito: o postinstall e quem decide o alvo e diz na cara qual plataforma nao tem binario. Travar aqui so trocaria uma mensagem clara por um EBADPLATFORM.",
+  "bin": {
+    "batuta": "bin/batuta.js"
+  },
+  "scripts": {
+    "postinstall": "node instalar.js"
+  },
+  "files": [
+    "bin/batuta.js",
+    "instalar.js",
+    "registro.js"
+  ],
+  "keywords": [
+    "agent-skills",
+    "claude",
+    "observability",
+    "skills"
+  ],
+  "license": "MIT",
+  "author": "filipecrocks",
+  "homepage": "https://batuta.space",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/filipecrocks/batuta.git",
+    "directory": "npm"
+  },
+  "bugs": {
+    "url": "https://github.com/filipecrocks/batuta/issues"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

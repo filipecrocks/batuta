@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batuta.space/schema/resumo-diario.schema.json",
+  "title": "Resumo diário agregado do Batuta",
+  "description": "O ÚNICO formato que sai da máquina do usuário, e só com opt-in explícito (`batuta config envio sim`). Uma linha por skill por dia, produzido por `batuta resumo --dia AAAA-MM-DD` (registro.rs, fn resumo_diario). Não contém prompt, hash de prompt, id de turno, caminho de arquivo, nome de usuário, IP nem geolocalização — se algum desses aparecer no corpo, é bug do cliente e o ingest recusa. Campo a campo idêntico ao que `crates/batuta/src/registro.rs` serializa via `json::escrever` (chaves em ordem alfabética, sem espaço).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "dia",
+    "instalacao",
+    "batuta_versao",
+    "modo",
+    "rotas",
+    "rotas_com_sugestao",
+    "rotas_holdout",
+    "braco_com",
+    "braco_holdout",
+    "vies_declarado",
+    "skills"
+  ],
+  "properties": {
+    "schema": {
+      "const": "batuta.resumo_diario.v1",
+      "description": "Versão do formato. Mudou o conjunto de campos, muda o sufixo — série histórica não se remenda em silêncio."
+    },
+    "dia": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "Dia UTC agregado (data::dia_utc). UTC e não fuso local: fuso local vaza aproximação de onde a pessoa está."
+    },
+    "instalacao": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$",
+      "description": "sha256('instalacao|'+sal)[..16] (casa::id_instalacao). Derivado do sal local: não carrega hostname, usuário nem caminho. Serve só para dizer 'estas linhas vieram da mesma máquina'."
+    },
+    "batuta_versao": {
+      "type": "string",
+      "minLength": 1,
+      "description": "CARGO_PKG_VERSION do binário que gerou a linha. Sem isto, comparar dias de versões diferentes é comparar réguas diferentes."
+    },
+    "modo": {
+      "type": "string",
+      "minLength": 1,
+      "description": "De onde veio o dado agregado. Hoje o CLI escreve 'local'; 'degradado' marca dado colhido via MCP (§4.1), onde não há hook e o funil é incompleto.",
+      "examples": ["local", "degradado"]
+    },
+    "rotas": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Turnos vistos pelo roteador no dia (denominador do funil)."
+    },
+    "rotas_com_sugestao": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Turnos em que o roteador falou. rotas - rotas_com_sugestao = silêncio (que é resultado desejável, não falha)."
+    },
+    "rotas_holdout": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Turnos em que o roteador se calou DE PROPÓSITO (§6). É o grupo de controle; sem ele o lift mede correlação."
+    },
+    "braco_com": {
+      "$ref": "#/$defs/braco",
+      "description": "Desfecho dos turnos em que o roteador falou."
+    },
+    "braco_holdout": {
+      "$ref": "#/$defs/braco",
+      "description": "Desfecho dos turnos de holdout. Comparar com braco_com dá o lift causal."
+    },
+    "vies_declarado": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Frase fixa que viaja junto com o dado (§1.5). O viés não vira nota de rodapé no site: anda colado na linha."
+    },
+    "skills": {
+      "type": "array",
+      "description": "Uma entrada por skill sugerida no dia, em ordem alfabética (BTreeMap do Rust). Vazio é resposta legítima: dia sem rota.",
+      "items": { "$ref": "#/$defs/skill" }
+    }
+  },
+  "$defs": {
+    "braco": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "n"],
+      "properties": {
+        "ok": { "type": "integer", "minimum": 0, "description": "Turnos julgados como terminados bem." },
+        "n": { "type": "integer", "minimum": 0, "description": "Turnos julgados no braço. n pequeno é motivo para não publicar conclusão." }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill",
+        "versao",
+        "rotas",
+        "ativacoes",
+        "ativacoes_usuario",
+        "turnos_julgados",
+        "turnos_ok",
+        "reprompts",
+        "erros",
+        "retries",
+        "tokens_in",
+        "tokens_out",
+        "custo_usd",
+        "turnos_ate_fim_mediana",
+        "fantasma"
+      ],
+      "properties": {
+        "skill": { "type": "string", "minLength": 1, "description": "Nome da skill como está no frontmatter local." },
+        "versao": { "type": "string", "description": "Versão declarada pela skill. String vazia quando a skill não versiona — e isso, por si, é um dado sobre a qualidade do ecossistema." },
+        "rotas": { "type": "integer", "minimum": 0, "description": "Vezes que o roteador sugeriu esta skill." },
+        "ativacoes": { "type": "integer", "minimum": 0, "description": "Vezes que a skill realmente disparou. ativacoes ÷ rotas é a taxa de disparo (§4.4)." },
+        "ativacoes_usuario": { "type": "integer", "minimum": 0, "description": "Subconjunto de ativacoes disparado pelo usuário, não pelo modelo (evento OTEL claude_code.skill_activated)." },
+        "turnos_julgados": { "type": "integer", "minimum": 0 },
+        "turnos_ok": { "type": "integer", "minimum": 0, "description": "turnos_ok ≤ turnos_julgados. O denominador anda junto de propósito: taxa sem n não é número." },
+        "reprompts": { "type": "integer", "minimum": 0, "description": "Proxy duro de desfecho ruim — não depende do juiz." },
+        "erros": { "type": "integer", "minimum": 0 },
+        "retries": { "type": "integer", "minimum": 0 },
+        "tokens_in": { "type": "number", "minimum": 0 },
+        "tokens_out": { "type": "number", "minimum": 0 },
+        "custo_usd": { "type": "number", "minimum": 0, "description": "Soma no dia. Dividido por turnos_ok vira custo por tarefa concluída — a métrica que ninguém mais tem (§4.4)." },
+        "turnos_ate_fim_mediana": { "type": "number", "minimum": 0, "description": "Mediana, não média: um turno perdido de 40 idas e vindas não pode arrastar o número." },
+        "fantasma": { "type": "boolean", "description": "rotas ≥ 5 e ativacoes = 0. Skill que o roteador insiste em sugerir e ninguém usa." }
+      }
+    }
+  }
+}

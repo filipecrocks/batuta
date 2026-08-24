@@ -1,0 +1,822 @@
+{
+  "schema": "batuta.bateria.v1",
+  "versao": "1.0.0",
+  "congelada_em": "2026-08-24",
+  "nota": "Bateria canonica congelada. Enunciado, insumo, criterio de aceite e verificador sao identicos nos dois bracos (sem skill / com skill) e nao se editam dentro de uma serie: mudanca de conteudo exige nova versao e entrada no CHANGELOG. Os verificadores rodam com bash -e, com o diretorio de saida da rodada como diretorio corrente e os insumos ja gerados nele; saida 0 = aprovado. Nenhuma tarefa usa rede, conta em servico externo ou a data corrente.",
+  "tarefas": [
+    {
+      "id": "cod-01",
+      "categoria": "codigo",
+      "complexidade": "simples",
+      "titulo": "Função slug determinística",
+      "enunciado": "Crie o arquivo solucao.py com a função slug(texto: str) -> str.\nRegras, nesta ordem: converter para minúsculas; remover acentos (decompor em NFD e descartar os caracteres combinantes); trocar cada caractere fora de [a-z0-9] por hífen; colapsar hífens repetidos em um só; remover hífens do começo e do fim.\nEntrada vazia ou só de símbolos devolve string vazia.\nUse apenas a biblioteca padrão do Python 3.",
+      "insumos": [],
+      "criterio_aceite": [
+        "Existe o arquivo solucao.py no diretório de saída.",
+        "solucao.py importa sem erro em Python 3.11 usando só a biblioteca padrão.",
+        "slug('Olá, Mundo!') devolve exatamente 'ola-mundo'.",
+        "slug('  São Paulo  ') devolve exatamente 'sao-paulo'.",
+        "slug('A---B') devolve exatamente 'a-b'.",
+        "slug('!!!') e slug('') devolvem string vazia.",
+        "slug('Café_com_Leite') devolve exatamente 'cafe-com-leite'.",
+        "Nenhum import fora da biblioteca padrão aparece em solucao.py."
+      ],
+      "verificacao": "automatica",
+      "verificador": "python3 - <<'PY'\nimport sys; sys.path.insert(0, '.')\nfrom solucao import slug\ncasos = [(u'Ol\\u00e1, Mundo!', 'ola-mundo'), (u'  S\\u00e3o Paulo  ', 'sao-paulo'),\n         ('A---B', 'a-b'), ('!!!', ''), (u'A\\u00e7\\u00e3o 2024', 'acao-2024'),\n         ('', ''), ('--x--', 'x'), (u'Caf\\u00e9_com_Leite', 'cafe-com-leite'),\n         (u'\\u00dcBER \\u00fcber', 'uber-uber'), ('  ', '')]\nfor entrada, esperado in casos:\n    obtido = slug(entrada)\n    assert obtido == esperado, (entrada, obtido, esperado)\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "test-driven-development",
+        "code-review"
+      ],
+      "teto_turnos": 3,
+      "observacao": "Piso da fatia código: qualquer modelo deveria passar. Serve de controle de sanidade da instrumentação, não de discriminação entre braços."
+    },
+    {
+      "id": "cod-02",
+      "categoria": "codigo",
+      "complexidade": "media",
+      "titulo": "Corrigir cálculo de caixa com desconto",
+      "enunciado": "O arquivo caixa.py calcula o total de um carrinho em centavos e está errado. Corrija-o mantendo a assinatura total(itens, cupom=None).\nComportamento correto: itens é uma lista de pares (preco_centavos, quantidade); o subtotal é a soma de preco*quantidade; se o subtotal for maior ou igual a 10000, aplica-se 10% de desconto arredondando para o inteiro mais próximo, com meio para cima; depois disso, o cupom 'FRETE' abate 1500; o total nunca fica abaixo de zero; o retorno é sempre int.",
+      "insumos": [
+        {
+          "nome": "caixa.py",
+          "descricao": "Implementação defeituosa entregue ao modelo, idêntica nos dois braços.",
+          "gerador": "cat > caixa.py <<'PY'\ndef total(itens, cupom=None):\n    subtotal = 0\n    for preco, qtd in itens:\n        subtotal += preco * qtd\n    if subtotal > 10000:\n        subtotal = subtotal * 0.9\n    if cupom == \"FRETE\":\n        subtotal -= 1500\n    return int(subtotal)\nPY"
+        }
+      ],
+      "criterio_aceite": [
+        "caixa.py continua expondo total(itens, cupom=None).",
+        "total([(5000, 2)]) devolve 9000.",
+        "total([(3333, 3)]) devolve 9999 (sem desconto, subtotal abaixo de 10000).",
+        "total([(2001, 5)]) devolve 9005 (arredondamento de 9004.5 com meio para cima).",
+        "total([(10000, 1)], 'FRETE') devolve 7500.",
+        "total([(1000, 1)], 'FRETE') devolve 0 e nunca um número negativo.",
+        "total([]) devolve 0.",
+        "O retorno é do tipo int em todos os casos acima."
+      ],
+      "verificacao": "automatica",
+      "verificador": "python3 - <<'PY'\nimport sys; sys.path.insert(0, '.')\nfrom caixa import total\ncasos = [(([(5000, 2)], None), 9000), (([(3333, 3)], None), 9999),\n         (([(10000, 1)], 'FRETE'), 7500), (([(1000, 1)], 'FRETE'), 0),\n         (([(10005, 1)], None), 9005), (([(2001, 5)], None), 9005),\n         (([], None), 0), (([(4000, 1), (6000, 1)], None), 9000),\n         (([(9999, 1)], 'FRETE'), 8499)]\nfor (itens, cupom), esperado in casos:\n    obtido = total(itens, cupom)\n    assert obtido == esperado, (itens, cupom, obtido, esperado)\n    assert isinstance(obtido, int) and not isinstance(obtido, bool), type(obtido)\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "systematic-debugging",
+        "test-driven-development"
+      ],
+      "teto_turnos": 5,
+      "observacao": "Três defeitos plantados: limiar com > em vez de >=, aritmética em float e truncamento por int(), piso ausente no cupom. O enunciado descreve o comportamento certo e nunca os defeitos."
+    },
+    {
+      "id": "cod-03",
+      "categoria": "codigo",
+      "complexidade": "media",
+      "titulo": "Máquina de estados de pedido com bateria própria",
+      "enunciado": "Crie pedido.py com a classe Pedido e a exceção TransicaoInvalida.\nEstados: novo, pago, enviado, entregue, cancelado. Métodos pagar(), enviar(), entregar() e cancelar() avançam nesta ordem: novo->pago->enviado->entregue; cancelar() só é válido a partir de novo ou pago. Qualquer outra transição levanta TransicaoInvalida sem mudar o estado.\nA propriedade estado devolve o estado atual e a propriedade historico devolve a lista de estados percorridos, começando por 'novo'.\nCrie também test_pedido.py, com unittest da biblioteca padrão e no mínimo 8 casos de teste, cobrindo todas as transições válidas e pelo menos 3 inválidas.",
+      "insumos": [],
+      "criterio_aceite": [
+        "Existem os arquivos pedido.py e test_pedido.py.",
+        "python3 -m unittest test_pedido termina com OK e zero falhas.",
+        "test_pedido.py declara 8 ou mais casos de teste.",
+        "Pedido() novo tem estado 'novo' e historico ['novo'].",
+        "Após pagar(), enviar() e entregar(), estado é 'entregue' e historico é ['novo','pago','enviado','entregue'].",
+        "enviar() a partir de 'novo' levanta TransicaoInvalida.",
+        "cancelar() a partir de 'enviado' levanta TransicaoInvalida.",
+        "cancelar() a partir de 'pago' leva o estado a 'cancelado'."
+      ],
+      "verificacao": "automatica",
+      "verificador": "set -e\nsaida=$(python3 -m unittest -v test_pedido 2>&1)\necho \"$saida\" | grep -qE '^OK' || { echo \"$saida\" | tail -20; exit 1; }\nn=$(echo \"$saida\" | grep -c '\\.\\.\\. ok')\n[ \"$n\" -ge 8 ] || { echo \"testes demais de menos: $n\"; exit 1; }\npython3 - <<'PY'\nimport sys; sys.path.insert(0, '.')\nfrom pedido import Pedido, TransicaoInvalida\np = Pedido()\nassert p.estado == 'novo' and list(p.historico) == ['novo'], p.historico\np.pagar(); p.enviar(); p.entregar()\nassert p.estado == 'entregue'\nassert list(p.historico) == ['novo', 'pago', 'enviado', 'entregue'], p.historico\nfor seq in (['enviar'], ['entregar'], ['pagar', 'entregar'], ['pagar', 'enviar', 'cancelar']):\n    q = Pedido()\n    try:\n        for m in seq:\n            getattr(q, m)()\n    except TransicaoInvalida:\n        continue\n    raise AssertionError('deveria falhar: %s' % seq)\nr = Pedido(); r.cancelar()\nassert r.estado == 'cancelado' and list(r.historico) == ['novo', 'cancelado']\ns = Pedido(); s.pagar(); s.cancelar()\nassert s.estado == 'cancelado'\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "test-driven-development",
+        "code-review"
+      ],
+      "teto_turnos": 6,
+      "observacao": "A bateria oculta roda depois da bateria escrita pelo próprio modelo. Mede se a skill de TDD produz teste que serve para alguma coisa, não só teste que passa."
+    },
+    {
+      "id": "cod-04",
+      "categoria": "codigo",
+      "complexidade": "complexa",
+      "titulo": "Diff estrutural de JSON com saída canônica",
+      "enunciado": "Crie jsondiff.py com a função diff(a, b) -> list.\nA especificação completa está em spec.md e os exemplos resolvidos em exemplos.json. Siga spec.md à risca, inclusive na ordenação da lista de saída.\nUse apenas a biblioteca padrão do Python 3.",
+      "insumos": [
+        {
+          "nome": "spec.md",
+          "descricao": "Especificação normativa do formato de saída e das regras de comparação.",
+          "gerador": "cat > spec.md <<'MD'\n# diff(a, b)\n\nCompara dois valores JSON (dict, list, str, int, float, bool, None)\ne devolve uma lista de operações.\n\n## Operação\nCada operação é um dict com as chaves:\n- `op`: \"add\", \"remove\" ou \"replace\"\n- `caminho`: string\n- `valor`: presente em \"add\" e \"replace\"; AUSENTE em \"remove\"\n\n## Caminho\nA raiz é a string vazia \"\". Cada nível acrescenta \"/\" + chave\n(dict) ou \"/\" + índice decimal (list). Exemplo: \"/itens/0/nome\".\n\n## Regras\n1. Valores iguais não geram operação.\n2. Se ambos são dict: chave só em `a` gera remove; chave só em `b`\n   gera add; chave em ambos com valores diferentes recursa.\n3. Se ambos são list: compara por índice até min(len(a), len(b));\n   índices sobrando em `a` geram remove; índices sobrando em `b`\n   geram add.\n4. Se os tipos-container diferem (dict vs list vs escalar), ou se\n   ambos são escalares diferentes, gera um único replace naquele\n   caminho com o valor de `b`.\n5. True e 1 são valores diferentes; 1 e 1.0 são valores iguais.\n\n## Ordenação\nA lista devolvida é ordenada pelo campo `caminho` em ordem\nlexicográfica crescente de código de caractere. Não existe empate:\ncada caminho aparece no máximo uma vez.\nMD"
+        },
+        {
+          "nome": "exemplos.json",
+          "descricao": "Quatro pares entrada/saída resolvidos, para ancorar a leitura da spec.",
+          "gerador": "cat > exemplos.json <<'JSON'\n[\n  {\"a\": {\"a\": 1}, \"b\": {\"a\": 2},\n   \"esperado\": [{\"op\": \"replace\", \"caminho\": \"/a\", \"valor\": 2}]},\n  {\"a\": {\"l\": [1, 2]}, \"b\": {\"l\": [1]},\n   \"esperado\": [{\"op\": \"remove\", \"caminho\": \"/l/1\"}]},\n  {\"a\": 1, \"b\": 2,\n   \"esperado\": [{\"op\": \"replace\", \"caminho\": \"\", \"valor\": 2}]},\n  {\"a\": {\"x\": {\"k\": 1}, \"y\": [1, 2, 3]},\n   \"b\": {\"x\": {\"k\": 1, \"n\": 9}, \"y\": [1, 5]},\n   \"esperado\": [{\"op\": \"add\", \"caminho\": \"/x/n\", \"valor\": 9},\n                {\"op\": \"replace\", \"caminho\": \"/y/1\", \"valor\": 5},\n                {\"op\": \"remove\", \"caminho\": \"/y/2\"}]}\n]\nJSON"
+        }
+      ],
+      "criterio_aceite": [
+        "Existe jsondiff.py expondo diff(a, b).",
+        "diff devolve [] para valores iguais, inclusive estruturas aninhadas.",
+        "Operações 'remove' não trazem a chave 'valor'.",
+        "diff(1, 2) devolve uma única operação com caminho igual à string vazia.",
+        "Diferença de tipo entre dict e list gera um único replace no caminho do container.",
+        "Os quatro exemplos de exemplos.json são reproduzidos exatamente, item a item.",
+        "A lista devolvida está ordenada por caminho em ordem lexicográfica crescente.",
+        "jsondiff.py não importa nada fora da biblioteca padrão."
+      ],
+      "verificacao": "automatica",
+      "verificador": "python3 - <<'PY'\nimport json, sys; sys.path.insert(0, '.')\nfrom jsondiff import diff\nfor caso in json.load(open('exemplos.json', encoding='utf-8')):\n    obtido = diff(caso['a'], caso['b'])\n    assert obtido == caso['esperado'], (caso, obtido)\nassert diff({'a': 1}, {'a': 1}) == []\nassert diff({'a': {'b': [1, {'c': 2}]}}, {'a': {'b': [1, {'c': 2}]}}) == []\nassert diff({'a': 1}, {}) == [{'op': 'remove', 'caminho': '/a'}]\nassert diff({}, {'a': 1}) == [{'op': 'add', 'caminho': '/a', 'valor': 1}]\nassert diff({'a': {'b': 1}}, {'a': {'b': 2}}) == [{'op': 'replace', 'caminho': '/a/b', 'valor': 2}]\nassert diff({'l': [1]}, {'l': [1, 2]}) == [{'op': 'add', 'caminho': '/l/1', 'valor': 2}]\nassert diff({'a': {'k': 1}}, {'a': [1]}) == [{'op': 'replace', 'caminho': '/a', 'valor': [1]}]\nassert diff({'a': 1}, {'a': 1.0}) == []\nassert diff({'a': True}, {'a': 1}) == [{'op': 'replace', 'caminho': '/a', 'valor': 1}]\nr = diff({'b': 1, 'a': 1, 'c': 1}, {'b': 2, 'a': 2, 'c': 2})\nassert [x['caminho'] for x in r] == ['/a', '/b', '/c'], r\nfor op in diff({'a': 1}, {}):\n    assert 'valor' not in op, op\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "test-driven-development",
+        "systematic-debugging",
+        "code-review"
+      ],
+      "teto_turnos": 8,
+      "observacao": "Prosa curta e dois insumos densos: é a tarefa que separa quem lê a spec inteira de quem chuta a partir do nome da função. Cuidado plantado: True vs 1 e 1 vs 1.0."
+    },
+    {
+      "id": "esc-01",
+      "categoria": "escrita",
+      "complexidade": "simples",
+      "titulo": "Reescrever aviso burocrático em linguagem simples",
+      "enunciado": "Reescreva o texto de aviso_original.txt em linguagem simples, para um morador sem formação jurídica.\nGrave o resultado em aviso_simples.txt, com no mínimo 40 e no máximo 120 palavras.\nPreserve os dois fatos operacionais do original: o valor da taxa e o prazo em dias. Não invente prazo, valor, canal de atendimento nem consequência que não esteja no original.",
+      "insumos": [
+        {
+          "nome": "aviso_original.txt",
+          "descricao": "Aviso de condomínio em registro burocrático, com dois fatos operacionais.",
+          "gerador": "cat > aviso_original.txt <<'TXT'\nCOMUNICADO INTERNO N. 14/2026\n\nVimos por meio desta comunicar a Vossas Senhorias que, conforme\npreceitua a convencao condominial em seu artigo 22, paragrafo\nsegundo, e nao obstante as tratativas anteriormente havidas, restou\ndeliberada em assembleia a instituicao de taxa extraordinaria no\nimporte de R$ 48,00 (quarenta e oito reais) por unidade autonoma,\ndestinada exclusivamente ao custeio da manutencao corretiva do\nsistema de bombeamento. Outrossim, informa-se que o adimplemento\ndevera ocorrer no prazo improrrogavel de 30 (trinta) dias contados\ndo recebimento do presente, sob pena de incidencia dos encargos\nmoratorios previstos no instrumento supracitado. Destarte,\nsolicita-se a maxima brevidade no atendimento da presente\nsolicitacao.\nTXT"
+        }
+      ],
+      "criterio_aceite": [
+        "Existe o arquivo aviso_simples.txt.",
+        "O texto tem entre 40 e 120 palavras.",
+        "O texto menciona o valor 48 e o prazo de 30 dias.",
+        "O texto diz para que serve a taxa (manutenção do sistema de bombeamento).",
+        "O texto diz o que acontece se não pagar no prazo (encargos por atraso).",
+        "Nenhuma das expressões 'outrossim', 'destarte', 'supracitado', 'não obstante', 'vimos por meio desta', 'conforme preceitua' aparece no texto.",
+        "Nenhum canal de atendimento, telefone, site ou pessoa de contato é citado (não existe no original).",
+        "Nenhum valor ou prazo diferente de 48 e 30 aparece no texto."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport re, unicodedata\nt = open('aviso_simples.txt', encoding='utf-8').read()\npalavras = re.findall(r\"[0-9A-Za-z\\u00c0-\\u00ff]+\", t)\nassert 40 <= len(palavras) <= 120, len(palavras)\nn = unicodedata.normalize('NFD', t.lower())\nn = ''.join(c for c in n if not unicodedata.combining(c))\nproibidos = ['outrossim', 'destarte', 'supracitado', 'nao obstante',\n             'vimos por meio desta', 'conforme preceitua', 'em epigrafe',\n             'adimplemento', 'improrrogavel']\nachados = [p for p in proibidos if p in n]\nassert not achados, achados\nassert '48' in t and '30' in t, 'fatos operacionais perdidos'\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "stop-slop",
+        "prompt-master"
+      ],
+      "teto_turnos": 3,
+      "observacao": "O verificador cuida do que é contável (tamanho, jargão, fatos). O juiz cuida do resto do critério: se um leigo entende, e se nada foi inventado."
+    },
+    {
+      "id": "esc-02",
+      "categoria": "escrita",
+      "complexidade": "media",
+      "titulo": "E-mail recusando um pedido sem queimar a relação",
+      "enunciado": "Escreva em recusa.txt um e-mail recusando o pedido descrito em pedido_recebido.txt.\nO e-mail precisa: dizer não de forma inequívoca no primeiro parágrafo; dar exatamente um motivo, e esse motivo tem que ser um dos fatos listados em restricoes.txt; oferecer uma alternativa concreta que caiba dentro dessas mesmas restrições; e terminar com uma próxima ação com data relativa (por exemplo 'na primeira semana de julho').\nMáximo de 180 palavras, com linha de assunto.",
+      "insumos": [
+        {
+          "nome": "pedido_recebido.txt",
+          "descricao": "O pedido que precisa ser recusado.",
+          "gerador": "cat > pedido_recebido.txt <<'TXT'\nDe: Marina Alves - Coordenacao Pedagogica\nAssunto: Oficina de robotica para as 6 turmas em junho\n\nOla! Fechamos a agenda do bimestre e queriamos a oficina de\nrobotica para as seis turmas do fundamental II, duas horas cada,\ntodas em junho. Precisamos de 15 kits montados e de um monitor\npor turma. Da pra confirmar ate sexta?\nTXT"
+        },
+        {
+          "nome": "restricoes.txt",
+          "descricao": "Fatos duros do lado de quem responde; o motivo da recusa tem de sair daqui.",
+          "gerador": "cat > restricoes.txt <<'TXT'\n- Existem 6 kits montados, nao 15. Compra nova so entra no\n  orcamento do segundo semestre.\n- Ha 1 monitor disponivel, e so nas tardes de terca e quinta.\n- Junho tem 2 semanas de recesso; sobram 2 semanas uteis.\n- Nenhuma oficina pode passar de 20 alunos por monitor.\n- Julho esta inteiro livre.\nTXT"
+        }
+      ],
+      "criterio_aceite": [
+        "Existe recusa.txt e ele contém uma linha de assunto.",
+        "O texto tem no máximo 180 palavras.",
+        "O primeiro parágrafo afirma que o pedido como formulado não será atendido.",
+        "Exatamente um motivo é apresentado.",
+        "O motivo apresentado corresponde a um dos fatos listados em restricoes.txt, sem alterá-lo.",
+        "Uma alternativa concreta é oferecida e ela respeita todos os fatos de restricoes.txt.",
+        "O texto termina com uma próxima ação e uma data relativa.",
+        "Nenhum fato ausente de pedido_recebido.txt e restricoes.txt é afirmado."
+      ],
+      "verificacao": "juiz",
+      "verificador": null,
+      "skills_candidatas": [
+        "stop-slop",
+        "prompt-master",
+        "brainstorming"
+      ],
+      "teto_turnos": 5,
+      "observacao": "Armadilha: a alternativa mais óbvia (dividir em duas semanas de junho) viola a restrição de recesso e de monitor único. Mede se o modelo cruza restrições ou só soa simpático."
+    },
+    {
+      "id": "esc-03",
+      "categoria": "escrita",
+      "complexidade": "media",
+      "titulo": "Resumo executivo com números rastreáveis",
+      "enunciado": "Leia relatorio_bruto.txt e escreva resumo.md com exatamente 5 linhas, cada uma começando com '- '.\nCada linha traz um número que aparece literalmente em relatorio_bruto.txt e diz o que aquele número significa.\nNenhuma linha passa de 30 palavras. Não use nenhum número que não esteja no relatório, nem some ou calcule médias novas.",
+      "insumos": [
+        {
+          "nome": "relatorio_bruto.txt",
+          "descricao": "Relatório operacional desorganizado, com números espalhados e ruído.",
+          "gerador": "cat > relatorio_bruto.txt <<'TXT'\nReuniao de operacao - marco/2026 (notas cruas)\n\nA fila de suporte fechou o mes com 1.284 chamados abertos, contra\n1.190 em fevereiro. O tempo mediano de primeira resposta foi de 41\nminutos. A meta interna era 30 minutos e nao foi batida em nenhuma\ndas 4 semanas.\n\nNinguem lembrava por que a semana 3 estourou. Depois se descobriu\nque o time ficou com 7 pessoas em vez de 11 por causa de ferias\nconcentradas.\n\nReclamacoes por cobranca indevida cairam de 96 para 38 depois da\ncorrecao do boleto. O NPS ficou em 42.\n\nO custo do plantao de fim de semana foi de R$ 18.400 no mes, e 3\ndos 5 plantoes nao registraram nenhum chamado.\n\nPendencias: revisar escala de ferias, revisar meta de 30 minutos.\nTXT"
+        }
+      ],
+      "criterio_aceite": [
+        "Existe resumo.md com exatamente 5 linhas não vazias, todas começando com '- '.",
+        "Cada uma das 5 linhas contém pelo menos um número.",
+        "Todo número citado aparece literalmente em relatorio_bruto.txt.",
+        "Nenhuma linha passa de 30 palavras.",
+        "Cada linha explica o que o número significa, não só o repete.",
+        "Nenhuma média, soma ou percentual novo é calculado.",
+        "Os 5 itens cobrem assuntos diferentes entre si.",
+        "Nenhuma recomendação ou opinião aparece nas 5 linhas."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport re\nbruto = open('relatorio_bruto.txt', encoding='utf-8').read()\nnums_bruto = set(re.findall(r'[0-9][0-9.,]*', bruto))\nlinhas = [l for l in open('resumo.md', encoding='utf-8').read().splitlines() if l.strip()]\nassert len(linhas) == 5, len(linhas)\nfor l in linhas:\n    assert l.startswith('- '), l\n    assert len(l.split()) <= 32, l\n    achados = re.findall(r'[0-9][0-9.,]*', l)\n    achados = [a.rstrip('.,') for a in achados]\n    assert achados, l\n    for a in achados:\n        assert a in nums_bruto or a + ',00' in nums_bruto or any(a == n.rstrip('.,') for n in nums_bruto), (a, l)\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "stop-slop",
+        "prompt-master"
+      ],
+      "teto_turnos": 5,
+      "observacao": "O verificador pega número inventado; o juiz pega paráfrase vazia e opinião disfarçada de fato."
+    },
+    {
+      "id": "esc-04",
+      "categoria": "escrita",
+      "complexidade": "complexa",
+      "titulo": "Despoluir página de produto e prestar contas da edição",
+      "enunciado": "Reescreva pagina_original.md em pagina_limpa.md, mantendo todos os fatos verificáveis e removendo o hype.\nRegras estão em regras_edicao.md e valem integralmente.\nProduza também alteracoes.md: uma tabela markdown com as colunas trecho_original | o_que_foi_feito | motivo, com uma linha para cada trecho alterado ou removido, no mínimo 8 linhas.\nNenhum fato novo pode entrar em pagina_limpa.md.",
+      "insumos": [
+        {
+          "nome": "pagina_original.md",
+          "descricao": "Página de produto saturada de hype, com fatos reais misturados a afirmações vazias.",
+          "gerador": "cat > pagina_original.md <<'MD'\n# Sonora: a revolucao definitiva do audio corporativo\n\nNum mundo cada vez mais acelerado, a Sonora nasceu para\ntransformar radicalmente a maneira como as empresas lideres de\nmercado pensam a comunicacao interna. Nossa solucao inovadora e\nde ponta entrega uma experiencia incomparavel e verdadeiramente\nunica.\n\n## Por que a Sonora e simplesmente a melhor\n\n- Transcricao automatica com 94,2% de acerto em audio de reuniao\n  em portugues (teste interno, 120 horas de audio).\n- Uma performance absolutamente incrivel que vai revolucionar o\n  seu dia a dia.\n- Processa 1 hora de audio em 4 minutos num notebook comum.\n- Escalabilidade sem precedentes para empresas de todos os\n  tamanhos, do pequeno ao gigante.\n- Roda 100% offline; nenhum audio sai da maquina.\n- Suporte world class com uma equipe apaixonada por resultados.\n- Preco: R$ 39/mes por assento, sem fidelidade.\n- Exportacao para .srt, .vtt e .txt.\n\n## Nao perca mais tempo\n\nMilhares de profissionais ja descobriram o poder transformador da\nSonora. Junte-se a revolucao hoje mesmo e leve sua produtividade\npara o proximo nivel!\nMD"
+        },
+        {
+          "nome": "regras_edicao.md",
+          "descricao": "Regras normativas da edição: o que sai, o que fica, o que nunca entra.",
+          "gerador": "cat > regras_edicao.md <<'MD'\n# Regras de edicao\n\n1. Fato verificavel FICA, com o numero intacto. Fato verificavel e\n   toda afirmacao com numero, unidade, formato de arquivo, preco ou\n   condicao testavel.\n2. Afirmacao sem numero e sem teste possivel SAI. Nao se reescreve\n   em tom mais sobrio: sai.\n3. Numero sem fonte declarada mantem a fonte entre parenteses como\n   estava no original.\n4. Proibido no texto final: revolucionario, revolucao, inovador,\n   de ponta, incomparavel, unico, incrivel, lider de mercado,\n   world class, transformador, proximo nivel, sem precedentes,\n   simplesmente o melhor, definitivo.\n5. Proibido superlativo sobre a propria empresa em qualquer forma.\n6. Nenhum fato novo entra. Se um fato faltou, ele continua faltando.\n7. O titulo passa a dizer o que o produto faz, em no maximo 10\n   palavras.\n8. A pagina final tem no maximo 200 palavras.\nMD"
+        }
+      ],
+      "criterio_aceite": [
+        "Existem pagina_limpa.md e alteracoes.md.",
+        "pagina_limpa.md tem no máximo 200 palavras.",
+        "Nenhuma das 14 palavras proibidas da regra 4 aparece em pagina_limpa.md.",
+        "Os 5 fatos com número do original (94,2%, 120 horas, 1 hora em 4 minutos, R$ 39/mês, .srt/.vtt/.txt) continuam presentes e com o valor intacto.",
+        "A afirmação 'roda 100% offline; nenhum áudio sai da máquina' continua presente.",
+        "A fonte '(teste interno, 120 horas de áudio)' continua acompanhando o número de acerto.",
+        "O título tem no máximo 10 palavras e descreve o que o produto faz.",
+        "alteracoes.md é uma tabela markdown com as colunas trecho_original, o_que_foi_feito e motivo, com 8 ou mais linhas de dados.",
+        "Nenhum fato ausente de pagina_original.md aparece em pagina_limpa.md."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport re, unicodedata\ndef sem_acento(s):\n    s = unicodedata.normalize('NFD', s.lower())\n    return ''.join(c for c in s if not unicodedata.combining(c))\np = open('pagina_limpa.md', encoding='utf-8').read()\nnp_ = sem_acento(p)\nassert len(re.findall(r\"[0-9A-Za-z\\u00c0-\\u00ff]+\", p)) <= 200, 'passou de 200 palavras'\nproibidas = ['revolucionari', 'revolucao', 'inovador', 'de ponta', 'incomparavel',\n             'incrivel', 'lider de mercado', 'world class', 'transformador',\n             'proximo nivel', 'sem precedentes', 'simplesmente a melhor', 'definitiv']\nachadas = [x for x in proibidas if x in np_]\nassert not achadas, achadas\nfor fato in ['94,2', '120', '39', '.srt', '.vtt', '.txt']:\n    assert fato in p, ('fato perdido', fato)\nassert 'offline' in np_\ntitulo = [l for l in p.splitlines() if l.startswith('#')][0]\nassert len(titulo.replace('#', '').split()) <= 10, titulo\na = open('alteracoes.md', encoding='utf-8').read()\nlinhas = [l for l in a.splitlines() if l.count('|') >= 3]\ndados = [l for l in linhas if not set(l.replace('|', '').strip()) <= set('-: ')]\nassert len(dados) >= 9, ('tabela curta', len(dados))\ncab = sem_acento(dados[0])\nfor col in ['trecho_original', 'o_que_foi_feito', 'motivo']:\n    assert col in cab, (col, dados[0])\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "stop-slop",
+        "prompt-master",
+        "ponytail"
+      ],
+      "teto_turnos": 8,
+      "observacao": "Tarefa de conflito: as regras 2 e 6 brigam com o instinto de 'melhorar' o texto. O verificador mede obediência; o juiz mede se o resultado ainda vende o produto sem mentir."
+    },
+    {
+      "id": "dad-01",
+      "categoria": "dados",
+      "complexidade": "simples",
+      "titulo": "Três métricas exatas a partir de um CSV",
+      "enunciado": "A partir de vendas.csv, grave resposta.json com exatamente estas três chaves:\nfaturamento_total_centavos (inteiro; soma de unidades vezes preco_unitario_centavos em todas as linhas),\nproduto_mais_unidades (string; o produto com a maior soma de unidades),\nmes_maior_faturamento (string no formato AAAA-MM; o mês com o maior faturamento).\nGrave também metodo.md com até 10 linhas explicando como cada número foi obtido.",
+      "insumos": [
+        {
+          "nome": "vendas.csv",
+          "descricao": "14 linhas de venda em 3 meses, 4 produtos; o produto de maior volume não é o de maior receita.",
+          "gerador": "cat > vendas.csv <<'CSV'\ndata,produto,unidades,preco_unitario_centavos\n2026-01-05,Caneca,12,2500\n2026-01-09,Camiseta,7,5900\n2026-01-17,Adesivo,40,300\n2026-01-28,Caneca,9,2500\n2026-02-03,Camiseta,15,5900\n2026-02-11,Adesivo,55,300\n2026-02-14,Caderno,6,4200\n2026-02-22,Caneca,11,2500\n2026-03-02,Camiseta,21,5900\n2026-03-08,Caderno,13,4200\n2026-03-15,Adesivo,30,300\n2026-03-19,Caneca,4,2500\n2026-03-25,Caderno,9,4200\n2026-03-30,Camiseta,5,5900\nCSV"
+        }
+      ],
+      "criterio_aceite": [
+        "Existe resposta.json e ele é JSON válido com exatamente as 3 chaves pedidas.",
+        "faturamento_total_centavos é um inteiro e vale 528300.",
+        "produto_mais_unidades vale 'Adesivo'.",
+        "mes_maior_faturamento vale '2026-03'.",
+        "Nenhum valor está em reais com vírgula; tudo em centavos inteiros.",
+        "Existe metodo.md com no máximo 10 linhas.",
+        "metodo.md descreve o cálculo de cada uma das 3 chaves.",
+        "metodo.md não afirma nenhum número que não esteja em vendas.csv ou em resposta.json."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport csv, json, collections\nlinhas = list(csv.DictReader(open('vendas.csv', encoding='utf-8')))\ntot = sum(int(l['unidades']) * int(l['preco_unitario_centavos']) for l in linhas)\nun = collections.Counter()\nmes = collections.Counter()\nfor l in linhas:\n    un[l['produto']] += int(l['unidades'])\n    mes[l['data'][:7]] += int(l['unidades']) * int(l['preco_unitario_centavos'])\nesperado = {'faturamento_total_centavos': tot,\n            'produto_mais_unidades': un.most_common(1)[0][0],\n            'mes_maior_faturamento': mes.most_common(1)[0][0]}\nobtido = json.load(open('resposta.json', encoding='utf-8'))\nassert set(obtido) == set(esperado), (sorted(obtido), sorted(esperado))\nassert isinstance(obtido['faturamento_total_centavos'], int)\nfor k in esperado:\n    assert obtido[k] == esperado[k], (k, obtido[k], esperado[k])\nm = open('metodo.md', encoding='utf-8').read().splitlines()\nassert len([l for l in m if l.strip()]) <= 10, len(m)\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "xlsx",
+        "systematic-debugging"
+      ],
+      "teto_turnos": 3,
+      "observacao": "Armadilha barata: o produto de maior volume (Adesivo, 125 unidades) é o de menor receita. Quem confunde 'mais vendido' com 'que mais fatura' erra."
+    },
+    {
+      "id": "dad-02",
+      "categoria": "dados",
+      "complexidade": "media",
+      "titulo": "Normalizar CSV sujo com regra de deduplicação",
+      "enunciado": "sujo.csv usa ponto e vírgula como separador e está inconsistente. Produza limpo.csv com separador vírgula e cabeçalho exatamente id,data,cliente,valor_centavos.\nRegras: datas aparecem em dd/mm/aaaa, dd-mm-aaaa ou aaaa-mm-dd e saem sempre em aaaa-mm-dd; valor sai em centavos inteiros; espaços em volta do nome do cliente são removidos; linhas em branco são descartadas; id repetido mantém apenas a linha de data mais recente; as linhas saem ordenadas por id em ordem numérica crescente.\nGrave também decisoes.md listando cada regra aplicada e quantas linhas ela afetou.",
+      "insumos": [
+        {
+          "nome": "sujo.csv",
+          "descricao": "11 linhas com três formatos de data, valores em reais, espaços sobrando, linha em branco e três ids repetidos.",
+          "gerador": "cat > sujo.csv <<'CSV'\nid;data;cliente;valor\n7;12/03/2026; Padaria Sol ;R$ 1.234,56\n3;2026-03-02;Cliente Aurora;R$ 890,00\n7;15/03/2026;Padaria Sol;R$ 1.234,56\n11;03-03-2026;Mercado Vila;R$ 45,90\n2;2026-02-28;Cliente Bravo;R$ 1.000,00\n\n5;18/03/2026;  Cafe do Ponto;R$ 12,00\n9;2026-03-09;Fornecedor Zeta;R$ 250,00\n3;2026-03-05;Cliente Aurora;R$ 910,00\n14;22/03/2026;Correios;R$ 33,00\n5;18/03/2026;Cafe do Ponto;R$ 12,00\n8;2026-03-11;Cliente Delta;R$ 78,00\nCSV"
+        }
+      ],
+      "criterio_aceite": [
+        "limpo.csv existe, usa vírgula como separador e tem o cabeçalho id,data,cliente,valor_centavos.",
+        "limpo.csv tem exatamente 8 linhas de dados.",
+        "Todas as datas estão no formato aaaa-mm-dd.",
+        "Todos os valores são inteiros em centavos, sem 'R$', ponto ou vírgula.",
+        "O id 7 aparece uma vez, com data 2026-03-15.",
+        "O id 3 aparece uma vez, com data 2026-03-05 e valor 91000.",
+        "Nenhum nome de cliente começa ou termina com espaço.",
+        "As linhas estão ordenadas por id em ordem numérica crescente (2,3,5,7,8,9,11,14).",
+        "decisoes.md nomeia cada regra aplicada e informa quantas linhas cada uma afetou."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport csv\nr = list(csv.reader(open('limpo.csv', encoding='utf-8')))\nassert r[0] == ['id', 'data', 'cliente', 'valor_centavos'], r[0]\ndados = [l for l in r[1:] if l and any(c.strip() for c in l)]\nesperado = [['2', '2026-02-28', 'Cliente Bravo', '100000'],\n            ['3', '2026-03-05', 'Cliente Aurora', '91000'],\n            ['5', '2026-03-18', 'Cafe do Ponto', '1200'],\n            ['7', '2026-03-15', 'Padaria Sol', '123456'],\n            ['8', '2026-03-11', 'Cliente Delta', '7800'],\n            ['9', '2026-03-09', 'Fornecedor Zeta', '25000'],\n            ['11', '2026-03-03', 'Mercado Vila', '4590'],\n            ['14', '2026-03-22', 'Correios', '3300']]\nassert len(dados) == 8, ('linhas de dados: %d' % len(dados))\nfor obtida, esp in zip(dados, esperado):\n    obtida = [c.strip() for c in obtida]\n    assert obtida == esp, (obtida, esp)\nopen('decisoes.md', encoding='utf-8').read()\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "xlsx",
+        "systematic-debugging",
+        "test-driven-development"
+      ],
+      "teto_turnos": 6,
+      "observacao": "O par duplicado do id 5 é idêntico; o do id 3 tem valor diferente. Quem deduplica por linha inteira em vez de por id erra o 3."
+    },
+    {
+      "id": "dad-03",
+      "categoria": "dados",
+      "complexidade": "media",
+      "titulo": "Achar e explicar anomalias numa série diária",
+      "enunciado": "serie.csv traz o consumo diário de água de um prédio, em litros, ao longo de abril de 2026.\nGrave anomalias.md com uma lista numerada. Cada item traz: a data (ou o intervalo de datas), o valor observado, o tipo de anomalia e uma hipótese de causa compatível com o próprio dado.\nTraga também, em uma linha, o critério numérico que você usou para chamar um ponto de anômalo.\nNão proponha ação corretiva.",
+      "insumos": [
+        {
+          "nome": "serie.csv",
+          "descricao": "30 leituras diárias com três anomalias plantadas: zero em 07/04, degrau alto de 14/04 a 16/04 e valor negativo em 23/04.",
+          "gerador": "cat > serie.csv <<'CSV'\ndata,litros\n2026-04-01,392\n2026-04-02,405\n2026-04-03,388\n2026-04-04,377\n2026-04-05,361\n2026-04-06,399\n2026-04-07,0\n2026-04-08,401\n2026-04-09,394\n2026-04-10,412\n2026-04-11,368\n2026-04-12,355\n2026-04-13,397\n2026-04-14,1148\n2026-04-15,1203\n2026-04-16,1176\n2026-04-17,402\n2026-04-18,371\n2026-04-19,359\n2026-04-20,396\n2026-04-21,408\n2026-04-22,390\n2026-04-23,-75\n2026-04-24,386\n2026-04-25,364\n2026-04-26,352\n2026-04-27,400\n2026-04-28,393\n2026-04-29,411\n2026-04-30,385\nCSV"
+        }
+      ],
+      "criterio_aceite": [
+        "Existe anomalias.md com uma lista numerada.",
+        "A data 2026-04-07 é apontada como anômala.",
+        "O intervalo que começa em 2026-04-14 é apontado como anômalo.",
+        "A data 2026-04-23 é apontada como anômala.",
+        "Nenhuma outra data é apontada como anômala.",
+        "Cada item informa o valor observado tal como está em serie.csv.",
+        "Cada item classifica o tipo da anomalia (por exemplo: leitura ausente, degrau sustentado, valor impossível).",
+        "Existe uma linha declarando o critério numérico usado.",
+        "Nenhuma ação corretiva é proposta."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nt = open('anomalias.md', encoding='utf-8').read()\nfor d in ['2026-04-07', '2026-04-14', '2026-04-23']:\n    assert d in t, ('anomalia nao apontada: ' + d)\nfor d in ['2026-04-03', '2026-04-11', '2026-04-26', '2026-04-30']:\n    assert d not in t, ('falso positivo: ' + d)\nassert '1148' in t or '1203' in t or '1176' in t, 'valor do degrau ausente'\nassert '-75' in t, 'valor negativo ausente'\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "dataviz",
+        "xlsx",
+        "systematic-debugging"
+      ],
+      "teto_turnos": 5,
+      "observacao": "Falso positivo custa: o verificador reprova quem marca dias normais. Os dias 12 e 26 são os mínimos legítimos da série e servem de isca."
+    },
+    {
+      "id": "dad-04",
+      "categoria": "dados",
+      "complexidade": "complexa",
+      "titulo": "Reconciliar extrato bancário com lançamentos internos",
+      "enunciado": "Concilie extrato.csv com lancamentos.csv seguindo as regras de regras.md.\nProduza reconciliacao.csv com o cabeçalho exatamente status,id_extrato,id_lancamento,data,valor_centavos,contraparte, uma linha por item, com status em conciliado, so_extrato ou so_lancamento.\nProduza também nota.md, com até 15 linhas, declarando o método e cada caso em que a regra precisou de interpretação.",
+      "insumos": [
+        {
+          "nome": "extrato.csv",
+          "descricao": "10 movimentos do banco.",
+          "gerador": "cat > extrato.csv <<'CSV'\nid_extrato,data,valor_centavos,contraparte\nE1,2026-03-02,15000,Padaria Sol\nE2,2026-03-03,-4200,Aluguel Sala\nE3,2026-03-05,89000,Cliente Aurora\nE4,2026-03-06,-1200,Cafe do Ponto\nE5,2026-03-09,32000,Cliente Bravo\nE6,2026-03-10,-25000,Fornecedor Zeta\nE7,2026-03-12,7800,Cliente Delta\nE8,2026-03-13,-9900,Taxa bancaria\nE9,2026-03-16,4500,Reembolso viagem\nE10,2026-03-18,-3300,Correios\nCSV"
+        },
+        {
+          "nome": "lancamentos.csv",
+          "descricao": "9 lançamentos do sistema interno, com datas defasadas e grafias diferentes da contraparte.",
+          "gerador": "cat > lancamentos.csv <<'CSV'\nid_lancamento,data,valor_centavos,contraparte\nL1,2026-03-02,15000,PADARIA SOL\nL2,2026-03-04,-4200,Aluguel Sala\nL3,2026-03-05,89000,Cliente Aurora\nL4,2026-03-07,-1200,Café do Ponto\nL5,2026-03-09,32000,Cliente Bravo\nL6,2026-03-11,-25000,Fornecedor Zeta\nL7,2026-03-12,7800,Cliente Delta\nL8,2026-03-20,-15900,Software anual\nL9,2026-03-21,6000,Cliente Eco\nCSV"
+        },
+        {
+          "nome": "regras.md",
+          "descricao": "Regra de casamento e formato de saída.",
+          "gerador": "cat > regras.md <<'MD'\n# Regras de conciliacao\n\n1. Duas linhas casam quando o valor_centavos e identico E a\n   diferenca entre as datas e de no maximo 2 dias E a contraparte\n   e a mesma depois de normalizada.\n2. Normalizar contraparte = minusculas, sem acentos, espacos\n   colapsados, sem espaco nas pontas.\n3. Cada id do extrato casa com no maximo um id de lancamento, e\n   vice-versa.\n4. Linha do extrato sem par: status so_extrato, id_lancamento\n   vazio.\n5. Linha de lancamento sem par: status so_lancamento, id_extrato\n   vazio.\n6. Nas linhas conciliadas, data, valor_centavos e contraparte sao\n   os do extrato.\n7. Ordem da saida: primeiro todas as conciliadas por id_extrato\n   na ordem em que aparecem em extrato.csv, depois as so_extrato\n   na mesma ordem, depois as so_lancamento na ordem de\n   lancamentos.csv.\nMD"
+        }
+      ],
+      "criterio_aceite": [
+        "reconciliacao.csv existe com o cabeçalho exato pedido.",
+        "reconciliacao.csv tem exatamente 12 linhas de dados.",
+        "Há exatamente 7 linhas com status conciliado, 3 com so_extrato e 2 com so_lancamento.",
+        "Os pares conciliados são E1-L1, E2-L2, E3-L3, E4-L4, E5-L5, E6-L6 e E7-L7.",
+        "E8, E9 e E10 aparecem como so_extrato, com id_lancamento vazio.",
+        "L8 e L9 aparecem como so_lancamento, com id_extrato vazio.",
+        "Cada id de extrato e cada id de lançamento aparece exatamente uma vez no arquivo.",
+        "Nas linhas conciliadas, contraparte e data são as do extrato.",
+        "A ordem das linhas segue a regra 7 de regras.md.",
+        "nota.md tem no máximo 15 linhas e declara o critério de janela de datas e de normalização de nome."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport csv\nr = list(csv.reader(open('reconciliacao.csv', encoding='utf-8')))\ncab = [c.strip() for c in r[0]]\nassert cab == ['status', 'id_extrato', 'id_lancamento', 'data', 'valor_centavos', 'contraparte'], cab\nlinhas = [[c.strip() for c in l] for l in r[1:] if l and any(c.strip() for c in l)]\nassert len(linhas) == 12, len(linhas)\npares = [(l[1], l[2]) for l in linhas if l[0] == 'conciliado']\nassert pares == [('E%d' % i, 'L%d' % i) for i in range(1, 8)], pares\nso_e = [l[1] for l in linhas if l[0] == 'so_extrato']\nso_l = [l[2] for l in linhas if l[0] == 'so_lancamento']\nassert so_e == ['E8', 'E9', 'E10'], so_e\nassert so_l == ['L8', 'L9'], so_l\nfor l in linhas:\n    if l[0] == 'so_extrato':\n        assert l[2] == '', l\n    if l[0] == 'so_lancamento':\n        assert l[1] == '', l\next = {x['id_extrato']: x for x in csv.DictReader(open('extrato.csv', encoding='utf-8'))}\nfor l in linhas:\n    if l[1]:\n        e = ext[l[1]]\n        assert l[3] == e['data'] and l[4] == e['valor_centavos'], l\n        assert l[5] == e['contraparte'], l\nassert [l[0] for l in linhas] == ['conciliado'] * 7 + ['so_extrato'] * 3 + ['so_lancamento'] * 2\nn = [x for x in open('nota.md', encoding='utf-8').read().splitlines() if x.strip()]\nassert len(n) <= 15, len(n)\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "xlsx",
+        "systematic-debugging",
+        "test-driven-development"
+      ],
+      "teto_turnos": 8,
+      "observacao": "L4 traz acento e E4 não; L2 e L6 estão fora por 1 dia. Quem casa por igualdade literal de nome ou de data perde 3 dos 7 pares."
+    },
+    {
+      "id": "doc-01",
+      "categoria": "documentos",
+      "complexidade": "simples",
+      "titulo": "Memorando de uma página em .docx",
+      "enunciado": "Gere o arquivo memorando.docx a partir dos dados de dados_memorando.txt.\nO documento precisa conter, nesta ordem: a palavra MEMORANDO com o número, o destinatário, o remetente, a data por extenso, um corpo de no máximo 200 palavras e a linha de assinatura.\nTodos os valores e prazos vêm do insumo; nada é inventado.",
+      "insumos": [
+        {
+          "nome": "dados_memorando.txt",
+          "descricao": "Campos crus do memorando.",
+          "gerador": "cat > dados_memorando.txt <<'TXT'\nnumero: 07/2026\npara: Diretoria de Operacoes\nde: Renata Lima - Coordenacao de Compras\ndata: 11 de marco de 2026\nassunto: reposicao do estoque de EPI\nfatos:\n- estoque atual cobre 12 dias de operacao\n- cotacao aprovada: R$ 12.400,00 com o fornecedor Bordo Seguranca\n- entrega prometida para 20 de marco de 2026\n- pedido precisa de assinatura da diretoria ate 13 de marco de 2026\nassinatura: Renata Lima - Coordenacao de Compras\nTXT"
+        }
+      ],
+      "criterio_aceite": [
+        "memorando.docx existe e abre como arquivo .docx válido (zip contendo word/document.xml).",
+        "O texto contém a palavra MEMORANDO e o número 07/2026.",
+        "O texto contém o destinatário 'Diretoria de Operações' e o remetente 'Renata Lima' (acentuação livre).",
+        "O texto contém a data '11 de março de 2026'.",
+        "O texto contém o valor R$ 12.400,00 e as datas 20 de março e 13 de março.",
+        "O corpo tem no máximo 200 palavras.",
+        "O documento termina com uma linha de assinatura com o nome e o cargo do remetente.",
+        "Nenhum valor, prazo ou fornecedor ausente do insumo aparece no documento."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport re, zipfile, unicodedata\nz = zipfile.ZipFile('memorando.docx')\nxml = z.read('word/document.xml').decode('utf-8')\ntexto = re.sub(r'<[^>]+>', ' ', xml)\ntexto = re.sub(r'\\s+', ' ', texto)\ndef na(s):\n    s = unicodedata.normalize('NFD', s.lower())\n    return ''.join(c for c in s if not unicodedata.combining(c))\nn = na(texto)\nfor termo in ['memorando', '07/2026', 'diretoria de operacoes', 'renata lima',\n              '11 de marco de 2026', '20 de marco', '13 de marco']:\n    assert termo in n, ('faltou: ' + termo)\nassert '12.400,00' in texto, 'valor ausente ou reformatado'\nassert len(texto.split()) <= 260, len(texto.split())\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "docx"
+      ],
+      "teto_turnos": 4,
+      "observacao": "Testa se o modelo produz .docx de verdade ou entrega markdown com extensão trocada. O limite de 260 palavras no verificador cobre cabeçalho mais corpo."
+    },
+    {
+      "id": "doc-02",
+      "categoria": "documentos",
+      "complexidade": "media",
+      "titulo": "Extrair campos de um contrato com aditivo",
+      "enunciado": "Leia contrato.md e grave campos.json com exatamente estas chaves: contratante, contratada, vigencia_inicio, vigencia_fim (datas em aaaa-mm-dd), valor_mensal_centavos (inteiro), indice_reajuste, aviso_previo_dias (inteiro) e foro.\nOs valores devem refletir o contrato como ele vale hoje, considerando todas as cláusulas do arquivo.\nGrave também citacoes.md indicando, para cada chave, o número da cláusula de onde o valor saiu.",
+      "insumos": [
+        {
+          "nome": "contrato.md",
+          "descricao": "Contrato de prestação de serviço com taxa de implantação, multa e um aditivo que retifica o valor mensal.",
+          "gerador": "cat > contrato.md <<'MD'\n# CONTRATO DE PRESTACAO DE SERVICOS\n\n**Contratante:** Instituto Semear\n**Contratada:** Bordo Tecnologia Ltda.\n\n**Clausula 1 - Objeto.** Manutencao do sistema de matriculas.\n\n**Clausula 2 - Vigencia.** O presente contrato vigora de 1 de abril\nde 2026 a 31 de marco de 2027, renovavel por igual periodo.\n\n**Clausula 3 - Preco.** A CONTRATANTE pagara a quantia mensal de\nR$ 3.200,00, vencivel todo dia 10.\n\n**Clausula 4 - Implantacao.** Sera devida taxa unica de implantacao\nde R$ 1.200,00, paga na assinatura, nao integrante do valor mensal.\n\n**Clausula 5 - Reajuste.** O valor mensal sera reajustado anualmente\npela variacao do IPCA.\n\n**Clausula 6 - Rescisao.** Qualquer das partes podera rescindir\nmediante aviso previo de 60 (sessenta) dias.\n\n**Clausula 7 - Multa.** A rescisao sem aviso previo sujeita a parte\na multa equivalente a 2 (duas) mensalidades.\n\n**Clausula 8 - Foro.** Fica eleito o foro da comarca de Curitiba.\n\n**Clausula 9 - Aditivo de 20 de marco de 2026.** Fica retificada a\nClausula 3: o valor mensal passa a ser de R$ 3.750,00, com efeito a\npartir do inicio da vigencia. As demais clausulas permanecem\ninalteradas.\nMD"
+        }
+      ],
+      "criterio_aceite": [
+        "campos.json é JSON válido com exatamente as 8 chaves pedidas.",
+        "contratante vale 'Instituto Semear' e contratada vale 'Bordo Tecnologia Ltda.'.",
+        "vigencia_inicio vale '2026-04-01' e vigencia_fim vale '2027-03-31'.",
+        "valor_mensal_centavos vale 375000 (o valor do aditivo, não o da cláusula 3).",
+        "indice_reajuste vale 'IPCA'.",
+        "aviso_previo_dias vale 60 e é inteiro.",
+        "foro vale 'Curitiba'.",
+        "A taxa de implantação de R$ 1.200,00 e a multa de 2 mensalidades não aparecem em nenhum campo.",
+        "citacoes.md aponta, para cada uma das 8 chaves, o número da cláusula correspondente, e aponta a cláusula 9 para valor_mensal_centavos."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport json\nc = json.load(open('campos.json', encoding='utf-8'))\nesperado = {'contratante': 'Instituto Semear',\n            'contratada': 'Bordo Tecnologia Ltda.',\n            'vigencia_inicio': '2026-04-01',\n            'vigencia_fim': '2027-03-31',\n            'valor_mensal_centavos': 375000,\n            'indice_reajuste': 'IPCA',\n            'aviso_previo_dias': 60,\n            'foro': 'Curitiba'}\nassert set(c) == set(esperado), (sorted(c), sorted(esperado))\nfor k, v in esperado.items():\n    obtido = c[k]\n    if isinstance(v, str):\n        assert obtido.strip() == v, (k, obtido, v)\n    else:\n        assert obtido == v and isinstance(obtido, int), (k, obtido, v)\ncit = open('citacoes.md', encoding='utf-8').read()\nassert '9' in cit, 'citacoes.md nao menciona a clausula 9'\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "pdf",
+        "docx",
+        "prompt-master"
+      ],
+      "teto_turnos": 5,
+      "observacao": "Três iscas: o preço da cláusula 3 foi revogado pela 9; a taxa de implantação parece valor recorrente; a multa é em mensalidades, não em reais."
+    },
+    {
+      "id": "doc-03",
+      "categoria": "documentos",
+      "complexidade": "media",
+      "titulo": "Apresentação de 6 slides a partir de um briefing",
+      "enunciado": "A partir de briefing.txt, gere apresentacao.pptx com exatamente 6 slides.\nSlide 1 é a capa com o título do projeto. Os slides 2 a 5 cobrem, um por slide e nesta ordem, os quatro tópicos listados no briefing. O slide 6 se chama 'Próximos passos' e traz as três ações do briefing com seus responsáveis.\nNenhum slide passa de 40 palavras. Todos os números vêm do briefing.",
+      "insumos": [
+        {
+          "nome": "briefing.txt",
+          "descricao": "Briefing com título, quatro tópicos e três próximas ações com responsáveis.",
+          "gerador": "cat > briefing.txt <<'TXT'\nProjeto: Merenda Rastreada - piloto em 4 escolas\n\nTopicos (um por slide, nesta ordem):\n1. Problema: 31% das entregas chegam fora da janela combinada\n2. Solucao: leitura de QR na portaria, sem app novo\n3. Piloto: 4 escolas, 8 semanas, custo de R$ 6.800\n4. Medicao: janela cumprida, tempo de descarga, perda registrada\n\nProximas acoes:\n- fechar lista das 4 escolas ate 30/04 - Renata Lima\n- imprimir 400 etiquetas QR - Joao Bastos\n- treinar porteiros em 2 encontros - Marina Alves\nTXT"
+        }
+      ],
+      "criterio_aceite": [
+        "apresentacao.pptx existe e é um .pptx válido.",
+        "O arquivo contém exatamente 6 slides.",
+        "O slide 1 contém o título 'Merenda Rastreada'.",
+        "Os slides 2 a 5 cobrem, nesta ordem, Problema, Solução, Piloto e Medição.",
+        "O slide 6 tem o título 'Próximos passos'.",
+        "O slide 6 cita os três responsáveis: Renata Lima, João Bastos e Marina Alves (acentuação livre).",
+        "Os números 31%, 4 escolas, 8 semanas, R$ 6.800 e 400 etiquetas aparecem e estão corretos.",
+        "Nenhum slide passa de 40 palavras.",
+        "Nenhum número ou nome ausente do briefing aparece na apresentação."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport re, zipfile, unicodedata\nz = zipfile.ZipFile('apresentacao.pptx')\nslides = sorted(n for n in z.namelist() if re.fullmatch(r'ppt/slides/slide\\d+\\.xml', n))\nassert len(slides) == 6, len(slides)\ndef na(s):\n    s = unicodedata.normalize('NFD', s.lower())\n    return ''.join(c for c in s if not unicodedata.combining(c))\ndef texto(n):\n    x = z.read(n).decode('utf-8')\n    return re.sub(r'\\s+', ' ', re.sub(r'<[^>]+>', ' ', x)).strip()\nordem = sorted(slides, key=lambda n: int(re.search(r'(\\d+)', n.split('/')[-1]).group(1)))\nt = [texto(n) for n in ordem]\nfor i, s in enumerate(t):\n    assert len(s.split()) <= 45, ('slide %d com %d palavras' % (i + 1, len(s.split())))\nassert 'merenda rastreada' in na(t[0]), t[0]\nassert 'proximos passos' in na(t[5]), t[5]\nfor nome in ['renata lima', 'joao bastos', 'marina alves']:\n    assert nome in na(t[5]), nome\ntudo = na(' '.join(t))\nfor termo in ['31', '6.800', '400', '8 semanas']:\n    assert termo in tudo, termo\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "pptx",
+        "stop-slop"
+      ],
+      "teto_turnos": 6,
+      "observacao": "Verificador aceita até 45 palavras por slide para absorver texto de layout; o teto real de 40 é conferido pelo juiz."
+    },
+    {
+      "id": "doc-04",
+      "categoria": "documentos",
+      "complexidade": "complexa",
+      "titulo": "Consolidar três versões conflitantes de uma política",
+      "enunciado": "Três setores mandaram versões diferentes da mesma política de viagem: v1.md, v2.md e v3.md.\nProduza politica_consolidada.md com até 600 palavras e exatamente as seções ## Escopo, ## Prazos, ## Reembolso, ## Exceções e ## Vigência.\nProduza divergencias.csv com o cabeçalho exatamente tema,v1,v2,v3,decisao,justificativa, uma linha por divergência, no mínimo 5 linhas.\nOnde as versões conflitam, escolha uma e registre a escolha em divergencias.csv. Não invente regra que não esteja em nenhuma das três.",
+      "insumos": [
+        {
+          "nome": "v1.md",
+          "descricao": "Versão do setor financeiro.",
+          "gerador": "cat > v1.md <<'MD'\n# Politica de viagem - Financeiro\nEscopo: vale para todo funcionario CLT.\nPrazo de solicitacao: 10 dias uteis antes da viagem.\nReembolso: ate R$ 90 por dia de alimentacao, com nota fiscal.\nPrestacao de contas: ate 5 dias uteis depois da volta.\nExcecoes: aprovadas pela diretoria financeira.\nVigencia: a partir de 1 de maio de 2026.\nMD"
+        },
+        {
+          "nome": "v2.md",
+          "descricao": "Versão do setor de RH.",
+          "gerador": "cat > v2.md <<'MD'\n# Politica de viagem - RH\nEscopo: vale para funcionario CLT e estagiario.\nPrazo de solicitacao: 5 dias uteis antes da viagem.\nReembolso: ate R$ 120 por dia de alimentacao, com nota fiscal ou\nrecibo simples.\nPrestacao de contas: ate 10 dias uteis depois da volta.\nExcecoes: aprovadas pela chefia imediata.\nVigencia: a partir de 1 de maio de 2026.\nMD"
+        },
+        {
+          "nome": "v3.md",
+          "descricao": "Versão do setor de operações.",
+          "gerador": "cat > v3.md <<'MD'\n# Politica de viagem - Operacoes\nEscopo: vale para funcionario CLT, estagiario e prestador com\ncontrato ativo.\nPrazo de solicitacao: 5 dias uteis antes da viagem, e 24 horas\nem caso de emergencia operacional.\nReembolso: ate R$ 120 por dia de alimentacao, com nota fiscal.\nPrestacao de contas: ate 10 dias uteis depois da volta.\nExcecoes: aprovadas pela chefia imediata, com ciencia do\nfinanceiro.\nVigencia: a partir de 1 de junho de 2026.\nMD"
+        }
+      ],
+      "criterio_aceite": [
+        "politica_consolidada.md existe, tem no máximo 600 palavras e traz exatamente as 5 seções pedidas, com esses títulos.",
+        "divergencias.csv existe com o cabeçalho exato e 5 ou mais linhas de dados.",
+        "Cada linha de divergencias.csv preenche as 6 colunas, sem célula vazia.",
+        "As colunas v1, v2 e v3 reproduzem o que cada versão diz sobre aquele tema.",
+        "Toda regra presente na política consolidada aparece em pelo menos uma das três versões.",
+        "As divergências de escopo, prazo de solicitação, teto de alimentação, prestação de contas e vigência estão todas registradas.",
+        "A coluna decisao de cada linha corresponde ao que está escrito na política consolidada.",
+        "Nenhuma seção da política consolidada fica vazia.",
+        "A justificativa de cada linha se apoia no conteúdo das versões, não em preferência genérica."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport csv, re\np = open('politica_consolidada.md', encoding='utf-8').read()\nsecoes = [l.strip() for l in p.splitlines() if l.strip().startswith('## ')]\nesperadas = ['## Escopo', '## Prazos', '## Reembolso', '## Exce\\u00e7\\u00f5es', '## Vig\\u00eancia']\nassert secoes == esperadas, secoes\nassert len(re.findall(r\"[0-9A-Za-z\\u00c0-\\u00ff]+\", p)) <= 600, 'passou de 600 palavras'\nfor i in range(len(esperadas)):\n    ini = p.index(esperadas[i]) + len(esperadas[i])\n    fim = p.index(esperadas[i + 1]) if i + 1 < len(esperadas) else len(p)\n    assert p[ini:fim].strip(), ('secao vazia: ' + esperadas[i])\nr = list(csv.reader(open('divergencias.csv', encoding='utf-8')))\nassert [c.strip() for c in r[0]] == ['tema', 'v1', 'v2', 'v3', 'decisao', 'justificativa'], r[0]\ndados = [l for l in r[1:] if l and any(c.strip() for c in l)]\nassert len(dados) >= 5, len(dados)\nfor l in dados:\n    assert len(l) == 6 and all(c.strip() for c in l), l\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "docx",
+        "stop-slop",
+        "brainstorming"
+      ],
+      "teto_turnos": 8,
+      "observacao": "Cinco divergências reais foram plantadas. A do prazo tem sub-caso (as 24 horas de emergência só existem na v3) e costuma ser esquecida."
+    },
+    {
+      "id": "pes-01",
+      "categoria": "pesquisa",
+      "complexidade": "simples",
+      "titulo": "Responder cinco perguntas citando a seção do dossiê",
+      "enunciado": "Responda as cinco perguntas de perguntas.txt usando apenas dossie.md.\nGrave respostas.md com cinco blocos. Cada bloco começa numa linha própria com 'P1:', 'P2:', 'P3:', 'P4:' e 'P5:', na ordem das perguntas, e termina citando a seção de onde a resposta saiu no formato §1, §2 ou §3.\nSe o dossiê não responder a pergunta, escreva 'não consta no dossiê' e cite a seção onde o assunto deveria estar.",
+      "insumos": [
+        {
+          "nome": "dossie.md",
+          "descricao": "Dossiê de três seções sobre um diagnóstico de transporte escolar; uma das cinco perguntas não tem resposta nele.",
+          "gerador": "cat > dossie.md <<'MD'\n# Diagnostico do transporte escolar - municipio de Vila Nova\n\n## §1. Frota e rotas\nA frota tem 14 onibus, sendo 3 com mais de 15 anos de uso.\nSao 22 rotas diarias, 9 delas em estrada de terra. A rota mais\nlonga tem 47 km e leva 1h50 no periodo chuvoso.\n\n## §2. Alunos atendidos\nO transporte atende 1.860 alunos, 61% deles no ensino\nfundamental. Em marco de 2026, 118 alunos ficaram sem embarque\nem pelo menos um dia por quebra de veiculo.\n\n## §3. Custo\nO custo mensal declarado e de R$ 412.000, dos quais 38% sao\ncombustivel. O custo por aluno por mes nao foi calculado pela\nsecretaria. Nao ha registro de contrato de manutencao\npreventiva.\nMD"
+        },
+        {
+          "nome": "perguntas.txt",
+          "descricao": "Cinco perguntas; a quarta não é respondida pelo dossiê.",
+          "gerador": "cat > perguntas.txt <<'TXT'\n1. Quantos onibus tem a frota e quantos sao velhos?\n2. Quantos alunos sao atendidos e qual a fatia do fundamental?\n3. Qual o custo mensal e quanto dele e combustivel?\n4. Qual a taxa de absenteismo dos motoristas?\n5. Quantos alunos ficaram sem embarque em marco de 2026?\nTXT"
+        }
+      ],
+      "criterio_aceite": [
+        "respostas.md tem exatamente cinco blocos, iniciados por P1: a P5:, nesta ordem.",
+        "Cada bloco cita uma seção no formato §1, §2 ou §3.",
+        "P1 informa 14 ônibus e 3 com mais de 15 anos, citando §1.",
+        "P2 informa 1.860 alunos e 61% no fundamental, citando §2.",
+        "P3 informa R$ 412.000 e 38% de combustível, citando §3.",
+        "P4 declara que não consta no dossiê.",
+        "P5 informa 118 alunos, citando §2.",
+        "Nenhum número ausente do dossiê aparece nas respostas."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport re\nt = open('respostas.md', encoding='utf-8').read()\npartes = re.split(r'(?m)^\\s*(?:\\*\\*)?P(?=[1-5]\\s*:)', t)[1:]\nassert len(partes) == 5, ('blocos encontrados: %d' % len(partes))\nfor i, p in enumerate(partes, 1):\n    assert p.lstrip().startswith(str(i)), ('ordem quebrada no bloco %d' % i)\n    assert re.search(r'\\u00a7\\s*[123]', p), ('sem citacao de secao no bloco %d' % i)\nfor termo in ['14', '1.860', '61', '412.000', '38', '118']:\n    assert termo in t, ('fato ausente: ' + termo)\nassert re.search(r'(?i)n\\u00e3o consta', partes[3]), 'P4 deveria declarar ausencia'\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "prompt-master",
+        "stop-slop"
+      ],
+      "teto_turnos": 3,
+      "observacao": "A pergunta 4 é a que interessa: mede se o modelo declara ausência de dado ou inventa uma taxa plausível. Sem rede, o dossiê é o mundo inteiro."
+    },
+    {
+      "id": "pes-02",
+      "categoria": "pesquisa",
+      "complexidade": "media",
+      "titulo": "Comparar três opções contra critérios declarados",
+      "enunciado": "Compare as três opções descritas em opcoes.md usando os critérios e os pesos de criterios.md.\nGrave decisao.md com: uma matriz em tabela markdown com uma linha por opção e uma coluna por critério; a nota atribuída em cada célula com a frase do insumo que a sustenta; o total ponderado; a recomendação; e a condição que faria a recomendação mudar.\nNão use nenhuma informação que não esteja nos dois insumos.",
+      "insumos": [
+        {
+          "nome": "opcoes.md",
+          "descricao": "Três opções de sistema de matrícula, com fatos assimétricos entre elas.",
+          "gerador": "cat > opcoes.md <<'MD'\n## Opcao A - SaaS pronto\nMensalidade de R$ 2.400. Implantacao em 3 semanas. Suporte por\nchat em horario comercial. Dados ficam em servidor do\nfornecedor, fora do municipio. Exporta CSV. Nao permite campo\nnovo sem contratar customizacao.\n\n## Opcao B - Software livre hospedado por nos\nSem mensalidade de licenca. Custo estimado de R$ 600 de\nservidor. Implantacao em 10 semanas. Exige 1 pessoa de TI\ndedicada, e o municipio tem 1 pessoa de TI ao todo. Dados ficam\nno municipio. Campo novo e configuracao, nao contrato.\n\n## Opcao C - Planilha compartilhada\nCusto zero. Implantacao imediata. Suporta os 1.860 alunos, mas\nsem controle de acesso por escola. Ja e o que se usa hoje, com\n3 casos de perda de dado registrados no ultimo ano.\nMD"
+        },
+        {
+          "nome": "criterios.md",
+          "descricao": "Cinco critérios com pesos que somam 100.",
+          "gerador": "cat > criterios.md <<'MD'\n| criterio | peso | nota 1 significa | nota 5 significa |\n|---|---|---|---|\n| custo no primeiro ano | 25 | mais caro | mais barato |\n| tempo ate estar rodando | 15 | mais lento | mais rapido |\n| soberania do dado | 25 | dado fora do municipio | dado no municipio |\n| esforco de equipe | 20 | exige gente que nao existe | nao exige gente nova |\n| risco de perda de dado | 15 | risco registrado | risco baixo |\n\nNota inteira de 1 a 5. Total ponderado = soma de nota x peso.\nMD"
+        }
+      ],
+      "criterio_aceite": [
+        "decisao.md contém uma tabela markdown com 3 linhas de opção e 5 colunas de critério.",
+        "Cada célula traz uma nota inteira de 1 a 5.",
+        "Cada célula traz a frase de opcoes.md que sustenta a nota.",
+        "O total ponderado de cada opção é apresentado e o cálculo confere com os pesos de criterios.md.",
+        "A opção com o maior total ponderado é a recomendada, ou a divergência é justificada explicitamente.",
+        "A recomendação vem acompanhada de uma condição verificável que a faria mudar.",
+        "A restrição de a Opção B exigir 1 pessoa de TI dedicada num município com 1 pessoa de TI ao todo aparece na avaliação de esforço de equipe.",
+        "Nenhum fato ausente de opcoes.md e criterios.md é usado."
+      ],
+      "verificacao": "juiz",
+      "verificador": null,
+      "skills_candidatas": [
+        "brainstorming",
+        "prompt-master"
+      ],
+      "teto_turnos": 6,
+      "observacao": "Julgamento cruzado obrigatório. A rubrica pede que o juiz refaça a conta ponderada: matriz bonita com soma errada é reprovação, não desconto."
+    },
+    {
+      "id": "pes-03",
+      "categoria": "pesquisa",
+      "complexidade": "media",
+      "titulo": "Separar contradições reais de divergências aparentes",
+      "enunciado": "doc_a.md e doc_b.md descrevem a mesma obra e discordam em alguns pontos.\nGrave contradicoes.md com uma lista numerada das contradições reais. Cada item cita o que DOC-A diz e o que DOC-B diz, com as palavras dos documentos.\nTermine com a seção '## Não são contradições', listando os pares que parecem divergir mas dizem a mesma coisa, com a conta que mostra isso.",
+      "insumos": [
+        {
+          "nome": "doc_a.md",
+          "descricao": "Relatório da secretaria.",
+          "gerador": "cat > doc_a.md <<'MD'\n# Relatorio da Secretaria de Obras - Ponte do Ribeirao\nPrazo de entrega: 18 meses a contar da ordem de servico.\nCusto total previsto: R$ 4,2 milhoes.\nArea de intervencao: 3.500 m2.\nFiscalizacao: equipe propria da Secretaria de Obras.\nFonte do recurso: emenda estadual, ja empenhada.\nMD"
+        },
+        {
+          "nome": "doc_b.md",
+          "descricao": "Parecer da consultoria, com três contradições reais e uma aparente.",
+          "gerador": "cat > doc_b.md <<'MD'\n# Parecer tecnico da consultoria - Ponte do Ribeirao\nPrazo de entrega: 24 meses a contar da ordem de servico.\nCusto total previsto: R$ 5,1 milhoes.\nArea de intervencao: 0,35 hectare.\nFiscalizacao: empresa terceirizada contratada para o lote 3.\nFonte do recurso: emenda estadual, ja empenhada.\nMD"
+        }
+      ],
+      "criterio_aceite": [
+        "contradicoes.md tem uma lista numerada com pelo menos 3 itens.",
+        "Cada item cita explicitamente DOC-A e DOC-B.",
+        "A divergência de prazo (18 meses contra 24 meses) está listada.",
+        "A divergência de custo (R$ 4,2 milhões contra R$ 5,1 milhões) está listada.",
+        "A divergência de fiscalização (equipe própria contra empresa terceirizada) está listada.",
+        "A área não é listada como contradição.",
+        "Existe a seção '## Não são contradições' e ela mostra que 3.500 m² equivale a 0,35 hectare.",
+        "A fonte do recurso, idêntica nos dois documentos, não é listada como contradição."
+      ],
+      "verificacao": "mista",
+      "verificador": "python3 - <<'PY'\nimport re\nt = open('contradicoes.md', encoding='utf-8').read()\nmarca = '## N\\u00e3o s\\u00e3o contradi\\u00e7\\u00f5es'\nassert marca in t, 'secao final ausente'\ncabeca, _, cauda = t.partition(marca)\nitens = re.split(r'(?m)^\\s*\\d+[.)]\\s', cabeca)[1:]\nassert len(itens) >= 3, ('itens numerados: %d' % len(itens))\nfor b in itens:\n    assert 'DOC-A' in b and 'DOC-B' in b, b[:100]\nfor termo in ['18', '24', '4,2', '5,1']:\n    assert termo in cabeca, ('divergencia ausente: ' + termo)\nbaixa = cabeca.lower()\nassert 'hectare' not in baixa and '3.500' not in cabeca, 'area listada como contradicao'\nassert 'hectare' in cauda.lower() and '3.500' in cauda, 'falsa contradicao nao identificada'\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "systematic-debugging",
+        "prompt-master",
+        "stop-slop"
+      ],
+      "teto_turnos": 5,
+      "observacao": "A isca da área é o coração da tarefa: quem compara strings acha 4 divergências, quem faz a conta acha 3."
+    },
+    {
+      "id": "pes-04",
+      "categoria": "pesquisa",
+      "complexidade": "complexa",
+      "titulo": "Síntese de cinco resumos com mapa de concordância",
+      "enunciado": "Os cinco arquivos de resumos/ trazem achados sobre o mesmo tema.\nGrave sintese.md com quatro partes: (1) o que os cinco concordam; (2) onde discordam, dizendo quem sustenta cada lado; (3) o que nenhum dos cinco responde; (4) qual medição resolveria a maior discordância, com a variável e o desenho.\nToda afirmação carrega entre colchetes o identificador dos resumos que a sustentam, por exemplo [R1, R4]. Máximo de 700 palavras.",
+      "insumos": [
+        {
+          "nome": "resumos/",
+          "descricao": "Cinco resumos curtos (R1 a R5) sobre reforço escolar em contraturno, com concordâncias, uma discordância central e uma lacuna comum.",
+          "gerador": "mkdir -p resumos\ncat > resumos/R1.md <<'MD'\nR1 - Estudo municipal, 12 escolas, 2024.\nReforco em contraturno elevou a nota media de matematica em 0,4\ndesvio padrao. O efeito so aparece com frequencia acima de 70%.\nCusto por aluno nao foi medido.\nMD\ncat > resumos/R2.md <<'MD'\nR2 - Avaliacao estadual, 40 escolas, 2025.\nGanho medio de 0,3 desvio padrao em matematica, nulo em leitura.\nO ganho foi maior em turmas de ate 12 alunos. Evasao do contraturno\nchegou a 45%. Custo por aluno nao foi medido.\nMD\ncat > resumos/R3.md <<'MD'\nR3 - Meta-analise de 9 programas, 2023.\nEfeito medio pequeno, 0,15 desvio padrao, e some quando se controla\npor selecao: quem entra no contraturno ja ia melhor. Alerta para\nvies de selecao em avaliacoes municipais.\nMD\ncat > resumos/R4.md <<'MD'\nR4 - Piloto com sorteio de vagas, 6 escolas, 2025.\nCom alocacao aleatoria, ganho de 0,22 desvio padrao em matematica.\nSem efeito em leitura. Frequencia media de 64%. Custo por aluno nao\nfoi medido.\nMD\ncat > resumos/R5.md <<'MD'\nR5 - Relato de rede privada, 3 escolas, 2026.\nProfessores relatam melhora de comportamento e engajamento. Nao ha\nmedida padronizada de aprendizagem. Turmas de 8 alunos.\nMD"
+        }
+      ],
+      "criterio_aceite": [
+        "sintese.md existe, tem no máximo 700 palavras e as quatro partes pedidas, nesta ordem.",
+        "Toda afirmação da parte 1 e da parte 2 traz identificadores entre colchetes.",
+        "Os identificadores usados existem entre R1 e R5.",
+        "A parte 1 registra que o efeito em matemática é positivo em R1, R2 e R4.",
+        "A parte 1 ou a parte 2 registra que o efeito em leitura é nulo em R2 e R4.",
+        "A parte 2 identifica a discordância central: R3 atribui o efeito a viés de seleção, enquanto R4 mede com sorteio de vagas.",
+        "A parte 3 registra que nenhum dos cinco mede custo por aluno.",
+        "A parte 4 nomeia uma variável observável e um desenho de medição que separa efeito de seleção.",
+        "Nenhum número que não esteja nos cinco resumos é citado."
+      ],
+      "verificacao": "juiz",
+      "verificador": null,
+      "skills_candidatas": [
+        "brainstorming",
+        "prompt-master",
+        "stop-slop"
+      ],
+      "teto_turnos": 8,
+      "observacao": "R3 e R4 são a tensão real: um diz que o efeito é seleção, o outro mede com sorteio. Síntese que só empilha os cinco não vê isso."
+    },
+    {
+      "id": "aut-01",
+      "categoria": "automacao",
+      "complexidade": "simples",
+      "titulo": "Script de padronização de nomes de arquivo",
+      "enunciado": "Escreva renomear.sh, que recebe um diretório como primeiro argumento e padroniza os nomes dos arquivos de imagem dentro dele.\nRegras: extensões .JPG, .jpeg e .JPEG viram .jpg; o nome-base vira minúsculo, sem acentos, com espaços e sublinhados trocados por hífen e hífens repetidos colapsados.\nSe o nome de destino já existir, o arquivo é deixado como está e um aviso vai para a saída de erro. Rodar o script duas vezes seguidas produz o mesmo resultado que rodar uma vez.",
+      "insumos": [],
+      "criterio_aceite": [
+        "renomear.sh existe e roda com bash renomear.sh <diretorio>.",
+        "'Foto 01.JPG' vira 'foto-01.jpg' quando não há conflito.",
+        "'praia_verão.jpeg' vira 'praia-verao.jpg'.",
+        "'IMG  99.JPEG' vira 'img-99.jpg'.",
+        "'ja-certo.jpg' permanece com o mesmo nome.",
+        "Quando 'foto-01.jpg' já existe, 'Foto 01.JPG' não é renomeado e o conteúdo de 'foto-01.jpg' permanece intacto.",
+        "O aviso de conflito é escrito na saída de erro, não na saída padrão.",
+        "A segunda execução seguida não altera nenhum nome nem nenhum conteúdo."
+      ],
+      "verificacao": "mista",
+      "verificador": "set -e\nrm -rf .verif && mkdir -p .verif/fotos\nprintf 'ORIGINAL\\n' > '.verif/fotos/foto-01.jpg'\nprintf 'A\\n' > '.verif/fotos/Foto 01.JPG'\nprintf 'B\\n' > '.verif/fotos/praia_verão.jpeg'\nprintf 'C\\n' > '.verif/fotos/ja-certo.jpg'\nprintf 'D\\n' > '.verif/fotos/IMG  99.JPEG'\nbash renomear.sh .verif/fotos >/dev/null 2>.verif/err1\nbash renomear.sh .verif/fotos >/dev/null 2>.verif/err2\npython3 - <<'PY'\nimport os\nd = '.verif/fotos'\nnomes = sorted(os.listdir(d))\nesperado = sorted(['foto-01.jpg', 'Foto 01.JPG', 'praia-verao.jpg',\n                   'ja-certo.jpg', 'img-99.jpg'])\nassert nomes == esperado, (nomes, esperado)\nassert open(os.path.join(d, 'foto-01.jpg')).read().strip() == 'ORIGINAL'\nassert open(os.path.join(d, 'praia-verao.jpg')).read().strip() == 'B'\nassert open(os.path.join(d, 'img-99.jpg')).read().strip() == 'D'\nassert os.path.getsize('.verif/err1') > 0, 'aviso de conflito ausente'\nprint('ok')\nPY\nrm -rf .verif",
+      "skills_candidatas": [
+        "test-driven-development",
+        "systematic-debugging"
+      ],
+      "teto_turnos": 4,
+      "observacao": "O verificador cria e apaga o diretório .verif dentro da pasta de saída. Idempotência é o que separa script de rascunho: a segunda execução não pode mexer em nada."
+    },
+    {
+      "id": "aut-02",
+      "categoria": "automacao",
+      "complexidade": "media",
+      "titulo": "Makefile com quatro alvos idempotentes",
+      "enunciado": "Escreva um Makefile com os alvos preparar, construir, testar e limpar.\npreparar cria o diretório build/. construir depende de preparar e grava build/app.txt com o conteúdo dos arquivos de src/ concatenados em ordem alfabética de nome. testar sai com código zero se build/app.txt existir e tiver 3 linhas, e com código diferente de zero caso contrário. limpar remove build/ e não falha se ele já não existir.\nRodar qualquer alvo duas vezes seguidas não pode dar erro.",
+      "insumos": [
+        {
+          "nome": "src/",
+          "descricao": "Três arquivos de entrada em ordem alfabética.",
+          "gerador": "mkdir -p src\nprintf 'alfa\\n' > src/a.txt\nprintf 'beta\\n' > src/b.txt\nprintf 'gama\\n' > src/c.txt"
+        }
+      ],
+      "criterio_aceite": [
+        "Existe um Makefile com os alvos preparar, construir, testar e limpar.",
+        "make construir cria build/app.txt com exatamente as linhas alfa, beta e gama, nesta ordem.",
+        "make construir funciona a partir do estado limpo, sem precisar de make preparar antes.",
+        "make construir duas vezes seguidas termina com código zero e deixa o mesmo conteúdo.",
+        "make testar sai com código zero quando build/app.txt tem 3 linhas.",
+        "make testar sai com código diferente de zero quando build/app.txt não existe.",
+        "make limpar remove o diretório build/.",
+        "make limpar duas vezes seguidas termina com código zero."
+      ],
+      "verificacao": "mista",
+      "verificador": "set -e\nmake limpar >/dev/null 2>&1 || true\nmake construir >/dev/null\nprintf 'alfa\\nbeta\\ngama\\n' > .esperado.txt\ndiff -u .esperado.txt build/app.txt\nmake construir >/dev/null\ndiff -u .esperado.txt build/app.txt\nmake testar >/dev/null\nrm -f build/app.txt\nif make testar >/dev/null 2>&1; then echo 'testar deveria falhar sem o artefato'; exit 1; fi\nmake construir >/dev/null\nmake limpar >/dev/null\ntest ! -d build\nmake limpar >/dev/null\nrm -f .esperado.txt\necho ok",
+      "skills_candidatas": [
+        "test-driven-development",
+        "documentation"
+      ],
+      "teto_turnos": 5,
+      "observacao": "Exige GNU make no ambiente da rodada. Pega dois vícios comuns: alvo sem dependência declarada e limpar que quebra quando não há o que limpar."
+    },
+    {
+      "id": "aut-03",
+      "categoria": "automacao",
+      "complexidade": "media",
+      "titulo": "Backup diário com retenção e agendamento",
+      "enunciado": "Escreva backup.sh e crontab.txt.\nbackup.sh lê as variáveis de ambiente ORIGEM, DESTINO e DATA_REF (no formato aaaa-mm-dd) e grava DESTINO/backup-<DATA_REF>.tar.gz com todo o conteúdo de ORIGEM, incluindo subdiretórios. Em seguida apaga de DESTINO todo arquivo backup-<data>.tar.gz cuja data seja mais de 7 dias anterior a DATA_REF.\nSe DATA_REF não estiver definida, usa a data de hoje.\ncrontab.txt tem uma única linha, agendando o script para as 03:00 de todos os dias.",
+      "insumos": [],
+      "criterio_aceite": [
+        "backup.sh e crontab.txt existem.",
+        "Com DATA_REF=2026-05-10, é criado DESTINO/backup-2026-05-10.tar.gz.",
+        "O tar.gz contém os arquivos de ORIGEM, inclusive os que estão em subdiretório.",
+        "backup-2026-05-01.tar.gz e backup-2026-05-02.tar.gz são apagados (mais de 7 dias).",
+        "backup-2026-05-03.tar.gz é mantido (exatamente 7 dias).",
+        "backup-2026-05-09.tar.gz é mantido.",
+        "Nenhum arquivo que não siga o padrão backup-<data>.tar.gz é apagado.",
+        "crontab.txt tem uma única linha começando por '0 3 * * *'."
+      ],
+      "verificacao": "mista",
+      "verificador": "set -e\nrm -rf .verif && mkdir -p .verif/origem/sub .verif/destino\nprintf 'um\\n' > .verif/origem/a.txt\nprintf 'dois\\n' > .verif/origem/sub/b.txt\nfor d in 2026-05-01 2026-05-02 2026-05-03 2026-05-09; do : > \".verif/destino/backup-$d.tar.gz\"; done\nprintf 'nao mexer\\n' > .verif/destino/LEIAME.txt\nORIGEM=.verif/origem DESTINO=.verif/destino DATA_REF=2026-05-10 bash backup.sh >/dev/null\npython3 - <<'PY'\nimport os, tarfile\nd = '.verif/destino'\nnomes = sorted(os.listdir(d))\nassert 'backup-2026-05-10.tar.gz' in nomes, nomes\nassert 'backup-2026-05-09.tar.gz' in nomes, nomes\nassert 'backup-2026-05-03.tar.gz' in nomes, nomes\nassert 'backup-2026-05-02.tar.gz' not in nomes, nomes\nassert 'backup-2026-05-01.tar.gz' not in nomes, nomes\nassert 'LEIAME.txt' in nomes, nomes\nt = tarfile.open(os.path.join(d, 'backup-2026-05-10.tar.gz'))\nm = [x.name for x in t.getmembers() if x.isfile()]\nassert any(n.endswith('a.txt') for n in m), m\nassert any(n.endswith('b.txt') for n in m), m\nlinhas = [l for l in open('crontab.txt', encoding='utf-8').read().splitlines() if l.strip()]\nassert len(linhas) == 1, linhas\nassert linhas[0].startswith('0 3 * * *'), linhas[0]\nprint('ok')\nPY\nrm -rf .verif",
+      "skills_candidatas": [
+        "documentation",
+        "systematic-debugging"
+      ],
+      "teto_turnos": 6,
+      "observacao": "DATA_REF existe justamente para a tarefa não depender da data corrente. A borda dos 7 dias exatos é o ponto que mais reprova."
+    },
+    {
+      "id": "aut-04",
+      "categoria": "automacao",
+      "complexidade": "complexa",
+      "titulo": "Pipeline de três etapas com retomada e log auditável",
+      "enunciado": "Escreva pipeline.sh com três etapas.\nEtapa 1 lê entrada/dados.csv e grava trabalho/1-extraido.txt com um valor por linha. Etapa 2 soma esses valores e grava trabalho/2-total.txt. Etapa 3 grava saida/resultado.txt com uma única linha no formato total=<soma>.\nEtapa já concluída não roda de novo: o estado fica em trabalho/.checkpoint. Se a variável FALHAR_EM estiver definida com o número de uma etapa, essa etapa falha de propósito e o script sai com código diferente de zero.\nCada execução acrescenta a log.jsonl uma linha JSON por etapa, com as chaves etapa, status (ok, pulada ou falha), inicio e fim. O log nunca é sobrescrito.",
+      "insumos": [
+        {
+          "nome": "entrada/dados.csv",
+          "descricao": "Quatro valores cuja soma é 1215.",
+          "gerador": "mkdir -p entrada\ncat > entrada/dados.csv <<'CSV'\nitem,valor\na,120\nb,340\nc,55\nd,700\nCSV"
+        }
+      ],
+      "criterio_aceite": [
+        "pipeline.sh existe e roda com bash pipeline.sh.",
+        "Com FALHAR_EM=2, o script sai com código diferente de zero e saida/resultado.txt não é criado.",
+        "Depois da falha em 2, trabalho/1-extraido.txt existe e o checkpoint registra a etapa 1 como concluída.",
+        "Na execução seguinte, a etapa 1 é registrada como 'pulada' no log e não é reexecutada.",
+        "Ao fim da execução bem-sucedida, saida/resultado.txt contém exatamente a linha total=1215.",
+        "Uma terceira execução registra as três etapas como 'pulada' e sai com código zero.",
+        "log.jsonl acumula as linhas das três execuções, sem apagar as anteriores.",
+        "Toda linha de log.jsonl é JSON válido com as chaves etapa, status, inicio e fim.",
+        "O campo status só assume os valores ok, pulada ou falha."
+      ],
+      "verificacao": "mista",
+      "verificador": "set -e\nrm -rf trabalho saida log.jsonl\nif FALHAR_EM=2 bash pipeline.sh >/dev/null 2>&1; then echo 'deveria falhar na etapa 2'; exit 1; fi\ntest -f trabalho/1-extraido.txt\ntest ! -f saida/resultado.txt\npython3 - <<'PY'\nimport json\nlinhas = [json.loads(l) for l in open('log.jsonl', encoding='utf-8') if l.strip()]\nassert linhas, 'log vazio depois da falha'\nassert any(r['etapa'] in (2, '2') and r['status'] == 'falha' for r in linhas), linhas\nPY\nn1=$(grep -c . log.jsonl)\nbash pipeline.sh >/dev/null\ngrep -qx 'total=1215' saida/resultado.txt\npython3 - <<'PY'\nimport json\nlinhas = [json.loads(l) for l in open('log.jsonl', encoding='utf-8') if l.strip()]\nfor r in linhas:\n    for k in ('etapa', 'status', 'inicio', 'fim'):\n        assert k in r, (k, r)\n    assert r['status'] in ('ok', 'pulada', 'falha'), r\nassert any(r['etapa'] in (1, '1') and r['status'] == 'pulada' for r in linhas), 'etapa 1 reexecutada'\nassert any(r['etapa'] in (3, '3') and r['status'] == 'ok' for r in linhas)\nPY\nn2=$(grep -c . log.jsonl)\n[ \"$n2\" -gt \"$n1\" ] || { echo 'log foi sobrescrito'; exit 1; }\nbash pipeline.sh >/dev/null\npython3 - <<'PY'\nimport json\nlinhas = [json.loads(l) for l in open('log.jsonl', encoding='utf-8') if l.strip()]\nult = linhas[-3:]\nassert len(ult) == 3 and all(r['status'] == 'pulada' for r in ult), ult\nprint('ok')\nPY",
+      "skills_candidatas": [
+        "test-driven-development",
+        "systematic-debugging",
+        "documentation"
+      ],
+      "teto_turnos": 8,
+      "observacao": "A tarefa mede retomada, não felicidade do caminho feliz. O verificador força uma falha real antes de deixar o pipeline terminar."
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "batuta-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Portal do Batuta — rankings, receitas, arena e a corrente de registros.",
+  "license": "MIT",
+  "scripts": {
+    "prebuild": "node ../script/sincronizar-conteudo.mjs",
+    "dev": "node ../script/sincronizar-conteudo.mjs && next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "next": "^15.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "typescript": "^5.7.3"
+  }
+}
