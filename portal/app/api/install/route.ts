@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Serves `script/instalar.sh` at https://batuta.space/instalar.sh.
+ * Serves `script/install.sh` at https://batuta.space/install.sh.
  *
  * The file served is THE SAME ONE that is versioned in the repository — there is no
  * "production" copy that someone could edit without going through git. In a project
@@ -13,16 +13,16 @@ export const runtime = "nodejs";
 export const revalidate = 3600;
 
 export async function GET() {
-  let corpo: string;
+  let body: string;
   try {
-    corpo = readFileSync(join(process.cwd(), "public", "instalar.sh"), "utf8");
+    body = readFileSync(join(process.cwd(), "public", "install.sh"), "utf8");
   } catch {
     return new Response(
-      "# instalador indisponível neste build\nexit 1\n",
+      "# installer unavailable in this build\nexit 1\n",
       { status: 503, headers: { "content-type": "text/x-shellscript; charset=utf-8" } },
     );
   }
-  return new Response(corpo, {
+  return new Response(body, {
     headers: {
       "content-type": "text/x-shellscript; charset=utf-8",
       "cache-control": "public, max-age=3600",

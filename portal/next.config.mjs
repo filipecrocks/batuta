@@ -1,14 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // O portal e estatico-primeiro por decisao de arquitetura (§4.5, §11 do dossie):
-  // ranking e receita sao paginas geradas, servidas por CDN. Sem banco quente no
-  // caminho de quem le. O banco existe para a ingestao e para o lote que regenera.
+  // The portal is static-first by architectural decision (§4.5, §11 of the dossier):
+  // ranking and recipe pages are generated, served by CDN. No hot database in the
+  // reader's path. The database exists for ingestion and for the batch that regenerates.
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {
     return [
       {
-        source: "/:caminho*",
+        source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -18,8 +18,8 @@ const nextConfig = {
     ];
   },
   async rewrites() {
-    // curl -fsSL https://batuta.space/instalar.sh | sh
-    return [{ source: "/instalar.sh", destination: "/api/instalar" }];
+    // curl -fsSL https://batuta.space/install.sh | sh
+    return [{ source: "/install.sh", destination: "/api/install" }];
   },
 };
 export default nextConfig;

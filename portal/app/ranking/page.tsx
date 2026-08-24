@@ -1,4 +1,4 @@
-import { rankingSkills } from "@/lib/db";
+import { skillRanking } from "@/lib/db";
 
 export const revalidate = 3600;
 export const metadata = {
@@ -15,7 +15,7 @@ function usd(v: number | null) {
 }
 
 export default async function Ranking() {
-  const linhas = await rankingSkills({ dias: 30, limite: 50, minInstalacoes: 3 });
+  const linhas = await skillRanking({ days: 30, limit: 50, minInstallations: 3 });
 
   return (
     <section className="faixa" style={{ paddingTop: "3rem" }}>
@@ -64,17 +64,17 @@ export default async function Ranking() {
               </thead>
               <tbody>
                 {linhas.map((l) => {
-                  const fantasma = l.rotas >= 5 && l.ativacoes === 0;
+                  const fantasma = l.routes >= 5 && l.activations === 0;
                   return (
                     <tr key={l.skill}>
                       <td>
                         <span className="mono">{l.skill}</span>
                       </td>
-                      <td>{l.rotas}</td>
-                      <td>{pct(l.taxa_disparo)}</td>
-                      <td>{pct(l.taxa_ok)}</td>
-                      <td>{usd(l.custo_por_tarefa)}</td>
-                      <td>{l.instalacoes}</td>
+                      <td>{l.routes}</td>
+                      <td>{pct(l.trigger_rate)}</td>
+                      <td>{pct(l.ok_rate)}</td>
+                      <td>{usd(l.cost_per_task)}</td>
+                      <td>{l.installations}</td>
                       <td>
                         {fantasma ? (
                           <span className="etiqueta hipotese">fantasma</span>

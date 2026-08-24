@@ -2,11 +2,11 @@
   "name": "batuta-portal",
   "version": "0.1.0",
   "private": true,
-  "description": "Portal do Batuta — rankings, receitas, arena e a corrente de registros.",
+  "description": "Batuta's portal — rankings, recipes, arena and the record chain.",
   "license": "MIT",
   "scripts": {
-    "prebuild": "node ../script/sincronizar-conteudo.mjs",
-    "dev": "node ../script/sincronizar-conteudo.mjs && next dev",
+    "prebuild": "node ../script/sync-content.mjs",
+    "dev": "node ../script/sync-content.mjs && next dev",
     "build": "next build",
     "start": "next start"
   },

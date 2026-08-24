@@ -1,5 +1,5 @@
 /**
- * POST /api/ingest — receives ONE aggregated daily summary (schema batuta.resumo_diario.v1).
+ * POST /api/ingest — receives ONE aggregated daily summary (schema batuta.daily_summary.v1).
  *
  * This is the only point in the project where user data enters. It's written
  * defensively against OUR OWN client, not against an attacker: if a bug in the
@@ -12,8 +12,8 @@
  * read the IP, doesn't keep the user agent, doesn't return anything that would
  * help correlate two installations.
  */
-import { sql, temBanco } from "../../../lib/db";
-import { canonico, sha256Hex } from "../../../lib/cadeia";
+import { sql, hasDb } from "../../../lib/db";
+import { canonical, sha256Hex } from "../../../lib/chain";
 
 // Needs node: the canonical hash and the driver run on both runtimes, but
 // ingestion is a write path and we prefer the runtime that gives a full
@@ -23,10 +23,10 @@ export const dynamic = "force-dynamic";
 
 /** 256 KB. A day of heavy use produces a few KB (~20 lines per installation); anyone
  *  sending more than that is sending something else. */
-const LIMITE_BYTES = 256 * 1024;
+const BYTE_LIMIT = 256 * 1024;
 
 /** If any of these show up at any level, the body is a raw event. */
-const CHAVES_PROIBIDAS = ["prompt", "prompt_hash", "turno", "texto"];
+const FORBIDDEN_KEYS = ["prompt", "prompt_hash", "turn", "text"];
 
 const CORS: Record<string, string> = {
   // The binary runs on the machine of whoever installed it, not on a domain of
@@ -37,8 +37,8 @@ const CORS: Record<string, string> = {
   "access-control-max-age": "86400",
 };
 
-function json(corpo: unknown, status = 200) {
-  return new Response(JSON.stringify(corpo), {
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json; charset=utf-8", ...CORS },
   });
@@ -52,9 +52,9 @@ export async function GET() {
   return json(
     {
       ok: false,
-      erro: "este endereço só aceita POST",
-      formato: "https://batuta.space/schema/resumo-diario.schema.json",
-      dica: "para ver o que o seu Batuta mandaria, rode `batuta resumo` — ele imprime o corpo exato, e nada sai da máquina enquanto `envio` estiver desligado",
+      error: "this endpoint only accepts POST",
+      format: "https://batuta.space/schema/daily-summary.schema.json",
+      hint: "to see what your Batuta would send, run `batuta summary` — it prints the exact body, and nothing leaves the machine while `upload` is off",
     },
     405,
   );
@@ -65,22 +65,22 @@ export async function GET() {
 /** Walks the entire body looking for a forbidden key. Returns the path of the
  *  first one found. Depth is limited because deeply nested JSON is a stack
  *  attack, not a daily summary. */
-function acharChaveProibida(v: unknown, caminho = "$", nivel = 0): string | null {
-  if (nivel > 32) return `${caminho} (aninhamento absurdo)`;
+function findForbiddenKey(v: unknown, path = "$", level = 0): string | null {
+  if (level > 32) return `${path} (absurd nesting)`;
   if (Array.isArray(v)) {
     for (let i = 0; i < v.length; i++) {
-      const r = acharChaveProibida(v[i], `${caminho}[${i}]`, nivel + 1);
+      const r = findForbiddenKey(v[i], `${path}[${i}]`, level + 1);
       if (r) return r;
     }
     return null;
   }
   if (v && typeof v === "object") {
     for (const k of Object.keys(v as Record<string, unknown>)) {
-      if (CHAVES_PROIBIDAS.includes(k)) return `${caminho}.${k}`;
-      const r = acharChaveProibida(
+      if (FORBIDDEN_KEYS.includes(k)) return `${path}.${k}`;
+      const r = findForbiddenKey(
         (v as Record<string, unknown>)[k],
-        `${caminho}.${k}`,
-        nivel + 1,
+        `${path}.${k}`,
+        level + 1,
       );
       if (r) return r;
     }
@@ -90,22 +90,22 @@ function acharChaveProibida(v: unknown, caminho = "$", nivel = 0): string | null
 
 // ================================================================== validation
 
-const CAMPOS_SKILL: Array<[string, "int" | "num" | "txt" | "bool"]> = [
+const SKILL_FIELDS: Array<[string, "int" | "num" | "txt" | "bool"]> = [
   ["skill", "txt"],
-  ["versao", "txt"],
-  ["rotas", "int"],
-  ["ativacoes", "int"],
-  ["ativacoes_usuario", "int"],
-  ["turnos_julgados", "int"],
-  ["turnos_ok", "int"],
+  ["version", "txt"],
+  ["routes", "int"],
+  ["activations", "int"],
+  ["user_activations", "int"],
+  ["turns_judged", "int"],
+  ["turns_ok", "int"],
   ["reprompts", "int"],
-  ["erros", "int"],
+  ["errors", "int"],
   ["retries", "int"],
   ["tokens_in", "num"],
   ["tokens_out", "num"],
-  ["custo_usd", "num"],
-  ["turnos_ate_fim_mediana", "num"],
-  ["fantasma", "bool"],
+  ["cost_usd", "num"],
+  ["median_turns_to_completion", "num"],
+  ["ghost", "bool"],
 ];
 
 /**
@@ -117,85 +117,85 @@ const CAMPOS_SKILL: Array<[string, "int" | "num" | "txt" | "bool"]> = [
  * Returns a list of readable reasons — the client has to be able to fix the
  * bug by reading the response, without opening our code.
  */
-function validar(p: any): string[] {
+function validate(p: any): string[] {
   const e: string[] = [];
-  const tipo = (v: unknown) => (Array.isArray(v) ? "lista" : v === null ? "nulo" : typeof v);
+  const kindOf = (v: unknown) => (Array.isArray(v) ? "array" : v === null ? "null" : typeof v);
 
   if (!p || typeof p !== "object" || Array.isArray(p)) {
-    return ["o corpo tem que ser um objeto JSON"];
+    return ["the body has to be a JSON object"];
   }
-  if (p.schema !== "batuta.resumo_diario.v1") {
-    e.push(`campo "schema" tem que ser "batuta.resumo_diario.v1" (veio: ${JSON.stringify(p.schema)})`);
+  if (p.schema !== "batuta.daily_summary.v1") {
+    e.push(`field "schema" has to be "batuta.daily_summary.v1" (got: ${JSON.stringify(p.schema)})`);
   }
-  if (typeof p.dia !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.dia)) {
-    e.push('campo "dia" tem que ser uma data AAAA-MM-DD em UTC');
+  if (typeof p.day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.day)) {
+    e.push('field "day" has to be a YYYY-MM-DD date in UTC');
   } else {
-    const d = new Date(`${p.dia}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) e.push(`campo "dia": ${p.dia} não é uma data que existe`);
+    const d = new Date(`${p.day}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) e.push(`field "day": ${p.day} is not a date that exists`);
     // a day of slack covers timezone and a slightly off clock; beyond that it's a broken clock
     else if (d.getTime() > Date.now() + 36 * 3600 * 1000) {
-      e.push(`campo "dia": ${p.dia} está no futuro — confira o relógio da máquina`);
+      e.push(`field "day": ${p.day} is in the future — check the machine's clock`);
     }
   }
-  if (typeof p.instalacao !== "string" || !/^[0-9a-f]{16}$/.test(p.instalacao)) {
-    e.push('campo "instalacao" tem que ser 16 caracteres hexadecimais minúsculos (casa::id_instalacao)');
+  if (typeof p.installation !== "string" || !/^[0-9a-f]{16}$/.test(p.installation)) {
+    e.push('field "installation" has to be 16 lowercase hex characters (home::installation_id)');
   }
-  for (const k of ["batuta_versao", "modo", "vies_declarado"]) {
-    if (typeof p[k] !== "string" || p[k].length === 0) e.push(`campo "${k}" tem que ser texto não vazio`);
-    else if (p[k].length > 500) e.push(`campo "${k}" passou de 500 caracteres`);
+  for (const k of ["batuta_version", "mode", "declared_bias"]) {
+    if (typeof p[k] !== "string" || p[k].length === 0) e.push(`field "${k}" has to be non-empty text`);
+    else if (p[k].length > 500) e.push(`field "${k}" is over 500 characters`);
   }
-  for (const k of ["rotas", "rotas_com_sugestao", "rotas_holdout"]) {
-    if (!Number.isInteger(p[k]) || p[k] < 0) e.push(`campo "${k}" tem que ser inteiro >= 0 (veio: ${tipo(p[k])})`);
+  for (const k of ["routes", "routes_suggested", "routes_holdout"]) {
+    if (!Number.isInteger(p[k]) || p[k] < 0) e.push(`field "${k}" has to be an integer >= 0 (got: ${kindOf(p[k])})`);
   }
-  for (const k of ["braco_com", "braco_holdout"]) {
+  for (const k of ["suggested_arm", "holdout_arm"]) {
     const b = p[k];
     if (!b || typeof b !== "object" || Array.isArray(b)) {
-      e.push(`campo "${k}" tem que ser um objeto {ok, n}`);
+      e.push(`field "${k}" has to be an object {ok, n}`);
       continue;
     }
-    if (!Number.isInteger(b.ok) || b.ok < 0) e.push(`campo "${k}.ok" tem que ser inteiro >= 0`);
-    if (!Number.isInteger(b.n) || b.n < 0) e.push(`campo "${k}.n" tem que ser inteiro >= 0`);
+    if (!Number.isInteger(b.ok) || b.ok < 0) e.push(`field "${k}.ok" has to be an integer >= 0`);
+    if (!Number.isInteger(b.n) || b.n < 0) e.push(`field "${k}.n" has to be an integer >= 0`);
     if (Number.isInteger(b.ok) && Number.isInteger(b.n) && b.ok > b.n) {
-      e.push(`campo "${k}": ok=${b.ok} maior que n=${b.n} — sucesso não pode passar do total`);
+      e.push(`field "${k}": ok=${b.ok} greater than n=${b.n} — successes can't exceed the total`);
     }
   }
   if (!Array.isArray(p.skills)) {
-    e.push('campo "skills" tem que ser uma lista (pode ser vazia: dia sem rota é dado legítimo)');
+    e.push('field "skills" has to be a list (can be empty: a day with no routes is legitimate data)');
     return e;
   }
   if (p.skills.length > 5000) {
-    e.push(`campo "skills": ${p.skills.length} entradas. Isso não é um dia de uso.`);
+    e.push(`field "skills": ${p.skills.length} entries. That's not a day of use.`);
     return e;
   }
   p.skills.forEach((s: any, i: number) => {
     if (!s || typeof s !== "object" || Array.isArray(s)) {
-      e.push(`skills[${i}] tem que ser um objeto`);
+      e.push(`skills[${i}] has to be an object`);
       return;
     }
-    for (const [k, t] of CAMPOS_SKILL) {
+    for (const [k, t] of SKILL_FIELDS) {
       const v = s[k];
-      if (t === "txt" && typeof v !== "string") e.push(`skills[${i}].${k} tem que ser texto`);
-      else if (t === "bool" && typeof v !== "boolean") e.push(`skills[${i}].${k} tem que ser booleano`);
-      else if (t === "int" && (!Number.isInteger(v) || v < 0)) e.push(`skills[${i}].${k} tem que ser inteiro >= 0`);
+      if (t === "txt" && typeof v !== "string") e.push(`skills[${i}].${k} has to be text`);
+      else if (t === "bool" && typeof v !== "boolean") e.push(`skills[${i}].${k} has to be boolean`);
+      else if (t === "int" && (!Number.isInteger(v) || v < 0)) e.push(`skills[${i}].${k} has to be an integer >= 0`);
       else if (t === "num" && (typeof v !== "number" || !Number.isFinite(v) || v < 0)) {
-        e.push(`skills[${i}].${k} tem que ser número finito >= 0`);
+        e.push(`skills[${i}].${k} has to be a finite number >= 0`);
       }
     }
-    if (typeof s.skill === "string" && s.skill.length === 0) e.push(`skills[${i}].skill está vazio`);
-    if (Number.isInteger(s.turnos_ok) && Number.isInteger(s.turnos_julgados) && s.turnos_ok > s.turnos_julgados) {
-      e.push(`skills[${i}]: turnos_ok maior que turnos_julgados`);
+    if (typeof s.skill === "string" && s.skill.length === 0) e.push(`skills[${i}].skill is empty`);
+    if (Number.isInteger(s.turns_ok) && Number.isInteger(s.turns_judged) && s.turns_ok > s.turns_judged) {
+      e.push(`skills[${i}]: turns_ok greater than turns_judged`);
     }
-    const extras = Object.keys(s).filter((k) => !CAMPOS_SKILL.some(([c]) => c === k));
-    if (extras.length) e.push(`skills[${i}] tem campo que não existe no schema: ${extras.join(", ")}`);
+    const extras = Object.keys(s).filter((k) => !SKILL_FIELDS.some(([c]) => c === k));
+    if (extras.length) e.push(`skills[${i}] has a field that doesn't exist in the schema: ${extras.join(", ")}`);
   });
 
-  const CAMPOS_TOPO = [
-    "schema", "dia", "instalacao", "batuta_versao", "modo", "rotas",
-    "rotas_com_sugestao", "rotas_holdout", "braco_com", "braco_holdout",
-    "vies_declarado", "skills",
+  const TOP_FIELDS = [
+    "schema", "day", "installation", "batuta_version", "mode", "routes",
+    "routes_suggested", "routes_holdout", "suggested_arm", "holdout_arm",
+    "declared_bias", "skills",
   ];
-  const extras = Object.keys(p).filter((k) => !CAMPOS_TOPO.includes(k));
-  if (extras.length) e.push(`campo que não existe no schema: ${extras.join(", ")}`);
+  const extras = Object.keys(p).filter((k) => !TOP_FIELDS.includes(k));
+  if (extras.length) e.push(`field that doesn't exist in the schema: ${extras.join(", ")}`);
 
   return e;
 }
@@ -205,92 +205,92 @@ function validar(p: any): string[] {
 export async function POST(req: Request) {
   // database down is 503, not 500: 503 says "try again later", and the
   // client keeps the day's summary to resend (a resend replaces, it doesn't duplicate)
-  if (!temBanco()) {
+  if (!hasDb()) {
     return json(
       {
         ok: false,
-        erro: "ingestão indisponível: o portal está sem DATABASE_URL configurada",
-        acao: "guarde o resumo e reenvie depois — reenvio do mesmo dia substitui, não duplica",
+        error: "ingestion unavailable: the portal has no DATABASE_URL configured",
+        action: "keep the summary and resend later — resending the same day replaces, it doesn't duplicate",
       },
       503,
     );
   }
 
-  const declarado = Number(req.headers.get("content-length") ?? "0");
-  if (declarado > LIMITE_BYTES) {
-    return json({ ok: false, erro: `corpo grande demais: ${declarado} bytes, limite ${LIMITE_BYTES}` }, 413);
+  const declared = Number(req.headers.get("content-length") ?? "0");
+  if (declared > BYTE_LIMIT) {
+    return json({ ok: false, error: `body too large: ${declared} bytes, limit ${BYTE_LIMIT}` }, 413);
   }
 
-  let cru: string;
+  let raw: string;
   try {
-    cru = await req.text();
+    raw = await req.text();
   } catch {
-    return json({ ok: false, erro: "não deu para ler o corpo da requisição" }, 400);
+    return json({ ok: false, error: "could not read the request body" }, 400);
   }
   // content-length lies; the real size is what counts
-  if (new TextEncoder().encode(cru).length > LIMITE_BYTES) {
-    return json({ ok: false, erro: `corpo grande demais: limite ${LIMITE_BYTES} bytes` }, 413);
+  if (new TextEncoder().encode(raw).length > BYTE_LIMIT) {
+    return json({ ok: false, error: `body too large: limit ${BYTE_LIMIT} bytes` }, 413);
   }
 
   let payload: any;
   try {
-    payload = JSON.parse(cru);
+    payload = JSON.parse(raw);
   } catch (err) {
-    return json({ ok: false, erro: `JSON inválido: ${(err as Error).message}` }, 400);
+    return json({ ok: false, error: `invalid JSON: ${(err as Error).message}` }, 400);
   }
 
   // FIRST gate, before the schema: if a raw event came in, nothing else matters
-  const proibida = acharChaveProibida(payload);
-  if (proibida) {
+  const forbidden = findForbiddenKey(payload);
+  if (forbidden) {
     return json(
       {
         ok: false,
-        erro: `corpo recusado: chave proibida em ${proibida}`,
-        motivo:
-          "as chaves prompt, prompt_hash, turno e texto pertencem ao formato LOCAL de evento (~/.batuta/eventos.jsonl), que nunca sobe. Se elas chegaram aqui, o cliente mandou evento cru em vez do resumo diário agregado — isso é BUG DO CLIENTE e nada foi gravado.",
-        conserto:
-          "envie a saída de `batuta resumo --dia AAAA-MM-DD`, que é o único formato de subida (schema batuta.resumo_diario.v1)",
-        reporte: "https://github.com/batuta/batuta/issues",
+        error: `body rejected: forbidden key at ${forbidden}`,
+        reason:
+          "the keys prompt, prompt_hash, turn and text belong to the LOCAL event format (~/.batuta/events.jsonl), which never gets uploaded. If they arrived here, the client sent a raw event instead of the aggregated daily summary — this is a CLIENT BUG and nothing was recorded.",
+        fix:
+          "send the output of `batuta summary --day YYYY-MM-DD`, which is the only upload format (schema batuta.daily_summary.v1)",
+        report: "https://github.com/batuta/batuta/issues",
       },
       400,
     );
   }
 
-  const problemas = validar(payload);
-  if (problemas.length) {
+  const problems = validate(payload);
+  if (problems.length) {
     return json(
       {
         ok: false,
-        erro: "corpo não bate com o schema batuta.resumo_diario.v1",
-        problemas: problemas.slice(0, 25),
-        total_problemas: problemas.length,
-        schema: "https://batuta.space/schema/resumo-diario.schema.json",
+        error: "body does not match schema batuta.daily_summary.v1",
+        problems: problems.slice(0, 25),
+        total_problems: problems.length,
+        schema: "https://batuta.space/schema/daily-summary.schema.json",
       },
       400,
     );
   }
 
   // hash of the body in canonical form: it's the receipt. Whoever sent it can run
-  // `batuta resumo --dia X | sha256sum` on their end and compare.
-  const hash = await sha256Hex(canonico(payload));
+  // `batuta summary --day X | sha256sum` on their end and compare.
+  const hash = await sha256Hex(canonical(payload));
 
   try {
     await sql`
-      insert into batuta.instalacoes (id, versao_batuta, modo)
-      values (${payload.instalacao}, ${payload.batuta_versao}, ${payload.modo})
+      insert into batuta.installations (id, batuta_version, mode)
+      values (${payload.installation}, ${payload.batuta_version}, ${payload.mode})
       on conflict (id) do update set
-        ultimo_visto  = now(),
-        versao_batuta = excluded.versao_batuta,
-        modo          = excluded.modo
+        last_seen      = now(),
+        batuta_version = excluded.batuta_version,
+        mode           = excluded.mode
     `;
 
     await sql`
-      insert into batuta.resumos_diarios (instalacao_id, dia, payload, hash)
-      values (${payload.instalacao}, ${payload.dia}::date, ${JSON.stringify(payload)}::jsonb, ${hash})
-      on conflict (instalacao_id, dia) do update set
+      insert into batuta.daily_summaries (installation_id, day, payload, hash)
+      values (${payload.installation}, ${payload.day}::date, ${JSON.stringify(payload)}::jsonb, ${hash})
+      on conflict (installation_id, day) do update set
         payload     = excluded.payload,
         hash        = excluded.hash,
-        recebido_em = now()
+        received_at = now()
     `;
 
     // Rollup of the received day, immediately. It's a recalculation of the whole
@@ -298,25 +298,25 @@ export async function POST(req: Request) {
     // While the fleet is small this costs milliseconds; when it starts hurting,
     // the nightly batch takes over and this turns into a queue. Switching before
     // that would be optimizing in the dark.
-    const r = await sql<{ linhas: number }>`
-      select batuta.recalcular_metricas_dia(${payload.dia}::date) as linhas
+    const r = await sql<{ rows: number }>`
+      select batuta.recalculate_day_metrics(${payload.day}::date) as rows
     `;
 
     return json({
       ok: true,
-      dia: payload.dia,
+      day: payload.day,
       skills: payload.skills.length,
-      metricas_recalculadas: r[0]?.linhas ?? 0,
+      metrics_recalculated: r[0]?.rows ?? 0,
       hash,
-      guardamos: "só o corpo agregado que você mandou. Sem IP, sem user agent, sem geolocalização.",
+      kept: "only the aggregated body you sent. No IP, no user agent, no geolocation.",
     });
   } catch (err) {
-    console.error("[batuta] ingest falhou:", err);
+    console.error("[batuta] ingest failed:", err);
     return json(
       {
         ok: false,
-        erro: "falha ao gravar",
-        acao: "reenvie depois — reenvio do mesmo dia substitui, não duplica",
+        error: "failed to write",
+        action: "resend later — resending the same day replaces, it doesn't duplicate",
       },
       500,
     );

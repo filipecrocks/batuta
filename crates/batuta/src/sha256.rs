@@ -13,14 +13,14 @@ const K: [u32; 64] = [
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-pub fn sha256(dados: &[u8]) -> [u8; 32] {
+pub fn sha256(data: &[u8]) -> [u8; 32] {
     let mut h: [u32; 8] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
         0x5be0cd19,
     ];
 
-    let bits = (dados.len() as u64).wrapping_mul(8);
-    let mut msg = dados.to_vec();
+    let bits = (data.len() as u64).wrapping_mul(8);
+    let mut msg = data.to_vec();
     msg.push(0x80);
     while msg.len() % 64 != 56 {
         msg.push(0);
@@ -28,13 +28,13 @@ pub fn sha256(dados: &[u8]) -> [u8; 32] {
     msg.extend_from_slice(&bits.to_be_bytes());
 
     let mut w = [0u32; 64];
-    for bloco in msg.chunks_exact(64) {
+    for block in msg.chunks_exact(64) {
         for i in 0..16 {
             w[i] = u32::from_be_bytes([
-                bloco[i * 4],
-                bloco[i * 4 + 1],
-                bloco[i * 4 + 2],
-                bloco[i * 4 + 3],
+                block[i * 4],
+                block[i * 4 + 1],
+                block[i * 4 + 2],
+                block[i * 4 + 3],
             ]);
         }
         for i in 16..64 {
@@ -81,11 +81,11 @@ pub fn sha256(dados: &[u8]) -> [u8; 32] {
         h[7] = h[7].wrapping_add(hh);
     }
 
-    let mut saida = [0u8; 32];
+    let mut out = [0u8; 32];
     for (i, v) in h.iter().enumerate() {
-        saida[i * 4..i * 4 + 4].copy_from_slice(&v.to_be_bytes());
+        out[i * 4..i * 4 + 4].copy_from_slice(&v.to_be_bytes());
     }
-    saida
+    out
 }
 
 pub fn hex(bytes: &[u8]) -> String {
@@ -99,10 +99,10 @@ pub fn hex(bytes: &[u8]) -> String {
 }
 
 /// Prompt hash: local salt + text. Only the hexadecimal comes out of here; the text, never.
-pub fn hash_com_sal(sal: &str, texto: &str) -> String {
-    let mut buf = Vec::with_capacity(sal.len() + texto.len() + 1);
-    buf.extend_from_slice(sal.as_bytes());
+pub fn hash_with_salt(salt: &str, text: &str) -> String {
+    let mut buf = Vec::with_capacity(salt.len() + text.len() + 1);
+    buf.extend_from_slice(salt.as_bytes());
     buf.push(0x1f);
-    buf.extend_from_slice(texto.as_bytes());
+    buf.extend_from_slice(text.as_bytes());
     hex(&sha256(&buf))
 }

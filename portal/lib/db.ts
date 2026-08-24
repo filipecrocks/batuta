@@ -14,198 +14,198 @@
  */
 import { neon } from "@neondatabase/serverless";
 
-export type Linha = Record<string, any>;
+export type Row = Record<string, any>;
 
-type Consulta = <T = Linha>(
+type Query = <T = Row>(
   strings: TemplateStringsArray,
-  ...valores: unknown[]
+  ...values: unknown[]
 ) => Promise<T[]>;
 
-let cliente: Consulta | null = null;
-let resolvido = false;
+let client: Query | null = null;
+let resolved = false;
 
 /** Resolves late, not at module load: in the Vercel build the runtime env isn't
  *  there yet, and tying the module to its absence is the bug this file
  *  exists to avoid. */
-function conexao(): Consulta | null {
-  if (resolvido) return cliente;
-  resolvido = true;
+function connection(): Query | null {
+  if (resolved) return client;
+  resolved = true;
   const url = process.env.DATABASE_URL;
-  if (!url) return (cliente = null);
+  if (!url) return (client = null);
   try {
-    cliente = neon(url) as unknown as Consulta;
+    client = neon(url) as unknown as Query;
   } catch {
-    cliente = null;
+    client = null;
   }
-  return cliente;
+  return client;
 }
 
 /** True when there's a database to talk to. The ingestion endpoint uses this to
  *  respond with an honest 503 instead of pretending it saved the data. */
-export function temBanco(): boolean {
-  return conexao() !== null;
+export function hasDb(): boolean {
+  return connection() !== null;
 }
 
 /**
- * Parameterized tagged template (`sql\`select ... where dia = ${dia}\``). The values
+ * Parameterized tagged template (`sql\`select ... where day = ${day}\``). The values
  * become $1, $2… in the driver: there is no string-concatenation path in this
  * portal, and there isn't meant to be one.
  */
-export const sql: Consulta = (<T = Linha>(
+export const sql: Query = (<T = Row>(
   strings: TemplateStringsArray,
-  ...valores: unknown[]
+  ...values: unknown[]
 ): Promise<T[]> => {
-  const c = conexao();
+  const c = connection();
   if (!c) return Promise.resolve([] as T[]);
-  return c<T>(strings, ...valores);
-}) as Consulta;
+  return c<T>(strings, ...values);
+}) as Query;
 
 /** Every page query goes through here: a database that's down doesn't take the
  *  portal down with it, it turns into an empty list and a warning in the server log. */
-async function segura<T>(rotulo: string, f: () => Promise<T[]>): Promise<T[]> {
-  if (!temBanco()) return [];
+async function safe<T>(label: string, f: () => Promise<T[]>): Promise<T[]> {
+  if (!hasDb()) return [];
   try {
     return await f();
   } catch (e) {
-    console.error(`[batuta] consulta "${rotulo}" falhou:`, e);
+    console.error(`[batuta] query "${label}" failed:`, e);
     return [];
   }
 }
 
 // ===================================================================== ranking
 
-export type LinhaRanking = {
+export type RankingRow = {
   skill: string;
-  rotas: number;
-  ativacoes: number;
-  ativacoes_usuario: number;
-  turnos_julgados: number;
-  turnos_ok: number;
+  routes: number;
+  activations: number;
+  user_activations: number;
+  turns_judged: number;
+  turns_ok: number;
   reprompts: number;
-  erros: number;
+  errors: number;
   retries: number;
-  custo_usd: number;
-  taxa_disparo: number | null;
-  taxa_ok: number | null;
-  custo_por_tarefa: number | null;
-  turnos_ate_fim_mediana: number | null;
-  instalacoes: number;
-  dias: number;
+  cost_usd: number;
+  trigger_rate: number | null;
+  ok_rate: number | null;
+  cost_per_task: number | null;
+  median_turns_to_completion: number | null;
+  installations: number;
+  days: number;
 };
 
 /**
  * Skill ranking over a window of days.
  *
- * `minInstalacoes` isn't decoration: a row with a single installation is one
+ * `minInstallations` isn't decoration: a row with a single installation is one
  * machine's anecdote, and publishing an anecdote as a ranking is exactly the
  * mistake the project accuses others of (§2). The default is 3 — low, but
  * explicit, and the page has to state where the cutoff was.
  */
-export function rankingSkills(opcoes?: {
-  dias?: number;
-  limite?: number;
-  minInstalacoes?: number;
-}): Promise<LinhaRanking[]> {
-  const dias = opcoes?.dias ?? 30;
-  const limite = opcoes?.limite ?? 50;
-  const minInst = opcoes?.minInstalacoes ?? 3;
-  return segura("rankingSkills", () => sql<LinhaRanking>`
+export function skillRanking(options?: {
+  days?: number;
+  limit?: number;
+  minInstallations?: number;
+}): Promise<RankingRow[]> {
+  const days = options?.days ?? 30;
+  const limit = options?.limit ?? 50;
+  const minInst = options?.minInstallations ?? 3;
+  return safe("skillRanking", () => sql<RankingRow>`
     select
       skill,
-      sum(rotas)::bigint              as rotas,
-      sum(ativacoes)::bigint          as ativacoes,
-      sum(ativacoes_usuario)::bigint  as ativacoes_usuario,
-      sum(turnos_julgados)::bigint    as turnos_julgados,
-      sum(turnos_ok)::bigint          as turnos_ok,
-      sum(reprompts)::bigint          as reprompts,
-      sum(erros)::bigint              as erros,
-      sum(retries)::bigint            as retries,
-      sum(custo_usd)                  as custo_usd,
-      case when sum(rotas) > 0
-           then sum(ativacoes)::float8 / sum(rotas) end        as taxa_disparo,
-      case when sum(turnos_julgados) > 0
-           then sum(turnos_ok)::float8 / sum(turnos_julgados) end as taxa_ok,
-      case when sum(turnos_ok) > 0
-           then sum(custo_usd) / sum(turnos_ok) end            as custo_por_tarefa,
-      avg(turnos_ate_fim_mediana)     as turnos_ate_fim_mediana,
+      sum(routes)::bigint              as routes,
+      sum(activations)::bigint         as activations,
+      sum(user_activations)::bigint    as user_activations,
+      sum(turns_judged)::bigint        as turns_judged,
+      sum(turns_ok)::bigint            as turns_ok,
+      sum(reprompts)::bigint           as reprompts,
+      sum(errors)::bigint              as errors,
+      sum(retries)::bigint             as retries,
+      sum(cost_usd)                    as cost_usd,
+      case when sum(routes) > 0
+           then sum(activations)::float8 / sum(routes) end        as trigger_rate,
+      case when sum(turns_judged) > 0
+           then sum(turns_ok)::float8 / sum(turns_judged) end as ok_rate,
+      case when sum(turns_ok) > 0
+           then sum(cost_usd) / sum(turns_ok) end            as cost_per_task,
+      avg(median_turns_to_completion)  as median_turns_to_completion,
       -- max, not sum: the same installation shows up on multiple days of the window,
       -- and summing would turn 1 loyal user into 30 users
-      max(instalacoes)                as instalacoes,
-      count(*)::int                   as dias
-    from batuta.metricas_skill_dia
-    where dia >= current_date - ${dias}::int
+      max(installations)               as installations,
+      count(*)::int                    as days
+    from batuta.skill_day_metrics
+    where day >= current_date - ${days}::int
     group by skill
-    having max(instalacoes) >= ${minInst}::int
-    order by rotas desc, skill asc
-    limit ${limite}::int
+    having max(installations) >= ${minInst}::int
+    order by routes desc, skill asc
+    limit ${limit}::int
   `);
 }
 
 // ==================================================================== recipes
 
-export type Receita = {
+export type Recipe = {
   slug: string;
-  versao: number;
+  version: number;
   persona: string | null;
   skills: unknown;
-  evidencia: unknown;
+  evidence: unknown;
   changelog: string | null;
-  publicada_em: string;
+  published_at: string;
 };
 
 /** Only the highest version of each recipe. Older ones stay in the database and
- *  remain citable by (slug, versao) — a recipe is a document, not state. */
-export function receitasPublicadas(limite = 100): Promise<Receita[]> {
-  return segura("receitasPublicadas", () => sql<Receita>`
+ *  remain citable by (slug, version) — a recipe is a document, not state. */
+export function publishedRecipes(limit = 100): Promise<Recipe[]> {
+  return safe("publishedRecipes", () => sql<Recipe>`
     select distinct on (slug)
-      slug, versao, persona, skills, evidencia, changelog, publicada_em
-    from batuta.receitas
-    where publicada_em is not null
-    order by slug asc, versao desc
-    limit ${limite}::int
+      slug, version, persona, skills, evidence, changelog, published_at
+    from batuta.recipes
+    where published_at is not null
+    order by slug asc, version desc
+    limit ${limit}::int
   `);
 }
 
 // ====================================================================== chain
 
-export type RegistroLinha = {
+export type RecordRow = {
   id: number;
-  tipo: string;
-  corpo: unknown;
+  type: string;
+  body: unknown;
   hash: string;
-  hash_anterior: string | null;
-  criado_em: string;
+  previous_hash: string | null;
+  created_at: string;
 };
 
 /** Last links of the chain, from the top backward. It comes in descending order
- *  because that's how the page displays it; anyone verifying with `verificarCadeia`
+ *  because that's how the page displays it; anyone verifying with `verifyChain`
  *  needs to reverse it (`.reverse()`) — the chain is read from the start. */
-export function ultimosRegistros(limite = 20): Promise<RegistroLinha[]> {
-  return segura("ultimosRegistros", () => sql<RegistroLinha>`
-    select id, tipo, corpo, hash, hash_anterior, criado_em
-    from batuta.registros
+export function latestRecords(limit = 20): Promise<RecordRow[]> {
+  return safe("latestRecords", () => sql<RecordRow>`
+    select id, type, body, hash, previous_hash, created_at
+    from batuta.records
     order by id desc
-    limit ${limite}::int
+    limit ${limit}::int
   `);
 }
 
 // ======================================================================= arena
 
-export type TarefaArena = {
+export type ArenaTask = {
   id: number;
-  enunciado_original: string;
-  enunciado_canonico: string | null;
-  categoria: string | null;
-  complexidade: string | null;
+  original_statement: string;
+  canonical_statement: string | null;
+  category: string | null;
+  complexity: string | null;
   status: string;
-  criado_em: string;
-  votos: number;
+  created_at: string;
+  votes: number;
 };
 
 /**
  * Arena queue with vote counts.
  *
- * Never selects `contato` (contact). The contact only serves to notify whoever
+ * Never selects `contact`. The contact only serves to notify whoever
  * submitted it when the task runs; there's no reason for it to travel to a third
  * party's browser, and the cheapest way to guarantee that is for it to not be in
  * the query.
@@ -213,27 +213,27 @@ export type TarefaArena = {
  * The order is by vote, and vote orders THE QUEUE. The test result doesn't look at
  * this column (§1.6, §10).
  */
-export function tarefasArena(opcoes?: {
+export function arenaTasks(options?: {
   status?: string;
-  limite?: number;
-}): Promise<TarefaArena[]> {
-  const status = opcoes?.status ?? null;
-  const limite = opcoes?.limite ?? 50;
-  return segura("tarefasArena", () => sql<TarefaArena>`
+  limit?: number;
+}): Promise<ArenaTask[]> {
+  const status = options?.status ?? null;
+  const limit = options?.limit ?? 50;
+  return safe("arenaTasks", () => sql<ArenaTask>`
     select
       t.id,
-      t.enunciado_original,
-      t.enunciado_canonico,
-      t.categoria,
-      t.complexidade,
+      t.original_statement,
+      t.canonical_statement,
+      t.category,
+      t.complexity,
       t.status::text as status,
-      t.criado_em,
-      count(v.impressao_digital)::int as votos
-    from batuta.tarefas t
-    left join batuta.votos v on v.tarefa_id = t.id
-    where ${status}::text is null or t.status = ${status}::batuta.status_tarefa
+      t.created_at,
+      count(v.fingerprint)::int as votes
+    from batuta.tasks t
+    left join batuta.votes v on v.task_id = t.id
+    where ${status}::text is null or t.status = ${status}::batuta.task_status
     group by t.id
-    order by votos desc, t.criado_em desc
-    limit ${limite}::int
+    order by votes desc, t.created_at desc
+    limit ${limit}::int
   `);
 }

@@ -1,5 +1,5 @@
 import { FormularioArena } from "@/components/FormularioArena";
-import { tarefasArena } from "@/lib/db";
+import { arenaTasks } from "@/lib/db";
 
 export const revalidate = 600;
 export const metadata = {
@@ -9,16 +9,17 @@ export const metadata = {
 };
 
 const ROTULO: Record<string, string> = {
-  triagem: "em triagem",
-  canonizada: "canonizada",
-  na_fila: "na fila",
-  rodando: "rodando",
-  publicada: "publicada",
-  recusada: "recusada",
+  screening: "em triagem",
+  canonized: "canonizada",
+  queued: "na fila",
+  running: "rodando",
+  published: "publicada",
+  rejected: "recusada",
+  duplicate: "duplicada",
 };
 
 export default async function Arena() {
-  const tarefas = await tarefasArena({ limite: 40 });
+  const tarefas = await arenaTasks({ limit: 40 });
 
   return (
     <section className="faixa" style={{ paddingTop: "3rem" }}>
@@ -67,12 +68,12 @@ export default async function Arena() {
               <tbody>
                 {tarefas.map((t) => (
                   <tr key={t.id}>
-                    <td>{t.enunciado_canonico ?? t.enunciado_original}</td>
-                    <td className="mono">{t.categoria ?? "—"}</td>
+                    <td>{t.canonical_statement ?? t.original_statement}</td>
+                    <td className="mono">{t.category ?? "—"}</td>
                     <td>
                       <span className="etiqueta">{ROTULO[t.status] ?? t.status}</span>
                     </td>
-                    <td>{t.votos}</td>
+                    <td>{t.votes}</td>
                   </tr>
                 ))}
               </tbody>

@@ -1,13 +1,13 @@
-import { rankingSkills } from "@/lib/db";
+import { skillRanking } from "@/lib/db";
 import { Mostrador } from "@/components/Mostrador";
 
 export const revalidate = 3600;
 
 export default async function Home() {
   // Static-first: the page is generated and revalidated hourly. No database in the
-  // reader's path. If the database doesn't exist yet, `rankingSkills` returns an
+  // reader's path. If the database doesn't exist yet, `skillRanking` returns an
   // empty list and the page tells the truth instead of making up a number.
-  const ranking = await rankingSkills({ dias: 30, limite: 5 });
+  const ranking = await skillRanking({ days: 30, limit: 5 });
   const skillsMedidas = ranking.length;
 
   return (

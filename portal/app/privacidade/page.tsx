@@ -43,7 +43,7 @@ export default function Privacidade() {
                 <td>número aleatório criado uma vez, que nunca sai daí</td>
               </tr>
               <tr>
-                <td className="mono">~/.batuta/indice.txt</td>
+                <td className="mono">~/.batuta/index.txt</td>
                 <td>nome, descrição e palavras das skills que você já tem</td>
               </tr>
               <tr>
@@ -79,27 +79,27 @@ export default function Privacidade() {
         </p>
         <pre>
           <code>{`{
-  "schema": "batuta.resumo_diario.v1",
-  "dia": "2026-08-24",
-  "instalacao": "9f2c1ab4de77e015",
+  "schema": "batuta.daily_summary.v1",
+  "day": "2026-08-24",
+  "installation": "9f2c1ab4de77e015",
   "skills": [
-    { "skill": "systematic-debugging", "rotas": 12, "ativacoes": 9,
-      "turnos_ok": 8, "custo_usd": 0.184, "fantasma": false }
+    { "skill": "systematic-debugging", "routes": 12, "activations": 9,
+      "turns_ok": 8, "cost_usd": 0.184, "ghost": false }
   ]
 }`}</code>
         </pre>
         <p>
           Sem prompt. Sem hash de prompt. Sem identificador de turno. Sem caminho de
-          arquivo. O <span className="mono">instalacao</span> é derivado do próprio sal,
+          arquivo. O <span className="mono">installation</span> é derivado do próprio sal,
           então não carrega seu nome, sua máquina nem sua pasta — serve só para dizer
           &ldquo;estas linhas vieram do mesmo lugar&rdquo;.
         </p>
 
         <h2>Confira antes de decidir</h2>
         <pre>
-          <code>{`batuta privacidade      # o que está guardado, em português
-batuta resumo           # exatamente o que subiria, imprimido na sua tela
-batuta config envio sim # só depois de ver o de cima`}</code>
+          <code>{`batuta privacy          # o que está guardado
+batuta summary          # exatamente o que subiria, imprimido na sua tela
+batuta config upload yes # só depois de ver o de cima`}</code>
         </pre>
 
         <h2>Apagar tudo</h2>

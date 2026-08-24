@@ -2,7 +2,7 @@
  * Canonical hash of the Batuta chain (§8).
  *
  * Three implementations need to produce the SAME byte for the same data:
- * `json::escrever` in crates/batuta/src/json.rs (Rust), `script/cadeia.mjs` (pure
+ * `json::write` in crates/batuta/src/json.rs (Rust), `script/chain.mjs` (pure
  * Node, the one that writes) and this file (portal, the one that verifies in front
  * of the visitor). If the three diverge by so much as a whitespace, the chain
  * "breaks" without anyone having touched anything, and the project loses
@@ -16,12 +16,12 @@
 /** The first link points to nothing, and nothing has a fixed shape. */
 export const GENESIS = "0".repeat(64);
 
-export type Registro = {
-  tipo: string;
-  corpo: unknown;
+export type ChainRecord = {
+  type: string;
+  body: unknown;
   hash: string;
-  hash_anterior: string | null;
-  criado_em?: string;
+  previous_hash: string | null;
+  created_at?: string;
 };
 
 // ------------------------------------------------------------------ canonical
@@ -31,11 +31,11 @@ export type Registro = {
  *
  * Rust uses BTreeMap<String>, which sorts by UTF-8 bytes — and UTF-8 byte order is
  * exactly code point order. JavaScript's `sort()` sorts by UTF-16 unit, which
- * reverses pairs outside the BMP (an emoji would end up before "" on one side and
+ * reverses pairs outside the BMP (an emoji would end up before "z" on one side and
  * after it on the other). With an ASCII key it comes out the same; with a record
  * key in another alphabet, it produces a different hash. Costs three lines to avoid.
  */
-function compararChaves(a: string, b: string): number {
+function compareKeys(a: string, b: string): number {
   const ca = Array.from(a);
   const cb = Array.from(b);
   const n = Math.min(ca.length, cb.length);
@@ -47,9 +47,9 @@ function compararChaves(a: string, b: string): number {
   return ca.length - cb.length;
 }
 
-/** Exact mirror of Rust's `json::escapar`. Note \b and \f: Rust sends both
+/** Exact mirror of Rust's `json::escape`. Note \b and \f: Rust sends both
  *  through the generic \u00XX path, while JSON.stringify would use \b and \f. */
-function escapar(s: string): string {
+function escape(s: string): string {
   let o = '"';
   for (const c of s) {
     if (c === '"') o += '\\"';
@@ -71,51 +71,51 @@ function escapar(s: string): string {
  * an exact negative half (-0.5), which doesn't show up in cost or count fields —
  * but the number has to match always, not almost always.
  */
-function numero(n: number): string {
+function number(n: number): string {
   if (!Number.isFinite(n)) {
-    throw new Error(`numero nao serializavel na corrente: ${n}`);
+    throw new Error(`number not serializable in the chain: ${n}`);
   }
   if (Number.isInteger(n) && Math.abs(n) < 1e15) return String(n === 0 ? 0 : n);
-  const escala = n * 1e6;
-  const arredondado =
-    (escala < 0 ? -Math.round(-escala) : Math.round(escala)) / 1e6;
-  let s = String(arredondado);
+  const scaled = n * 1e6;
+  const rounded =
+    (scaled < 0 ? -Math.round(-scaled) : Math.round(scaled)) / 1e6;
+  let s = String(rounded);
   // Rust's Display never uses scientific notation; JS's String() uses it outside
   // the range [1e-6, 1e21)
   if (s.includes("e") || s.includes("E")) {
-    s = arredondado.toFixed(6).replace(/\.?0+$/, "");
+    s = rounded.toFixed(6).replace(/\.?0+$/, "");
   }
   return s;
 }
 
 /** Canonical JSON: keys in order, without a single space. */
-export function canonico(v: unknown): string {
+export function canonical(v: unknown): string {
   if (v === null || v === undefined) return "null";
   const t = typeof v;
   if (t === "boolean") return v ? "true" : "false";
-  if (t === "number") return numero(v as number);
-  if (t === "string") return escapar(v as string);
-  if (Array.isArray(v)) return "[" + v.map(canonico).join(",") + "]";
+  if (t === "number") return number(v as number);
+  if (t === "string") return escape(v as string);
+  if (Array.isArray(v)) return "[" + v.map(canonical).join(",") + "]";
   if (t === "object") {
     const m = v as Record<string, unknown>;
-    const chaves = Object.keys(m)
+    const keys = Object.keys(m)
       // undefined doesn't exist on the Rust side; treating it as absent is what
       // JSON.stringify does, and it's what keeps both sides equal
       .filter((k) => m[k] !== undefined)
-      .sort(compararChaves);
+      .sort(compareKeys);
     return (
       "{" +
-      chaves.map((k) => escapar(k) + ":" + canonico(m[k])).join(",") +
+      keys.map((k) => escape(k) + ":" + canonical(m[k])).join(",") +
       "}"
     );
   }
-  throw new Error(`tipo sem forma canonica: ${t}`);
+  throw new Error(`type with no canonical form: ${t}`);
 }
 
 // ---------------------------------------------------------------------- hash
 
-export async function sha256Hex(texto: string): Promise<string> {
-  const bytes = new TextEncoder().encode(texto);
+export async function sha256Hex(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text);
   const dig = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(dig))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -123,22 +123,22 @@ export async function sha256Hex(texto: string): Promise<string> {
 }
 
 /**
- * The link. The preimage is the canonical JSON of `{corpo, hash_anterior}` — the
+ * The link. The preimage is the canonical JSON of `{body, previous_hash}` — the
  * whole body, plus the hash of whatever came before. Altering any old record
- * changes its hash, which is the next one's `hash_anterior`, which changes the
+ * changes its hash, which is the next one's `previous_hash`, which changes the
  * next one's hash, and so on to the top: that's why tampering shows up in front
  * of everyone, not just whoever went to check that particular record.
  *
- * Project convention: `tipo` and `criado_em` also live INSIDE the body, and the
- * file in registros/ repeats them at the top level only for readability. Without
+ * Project convention: `type` and `created_at` also live INSIDE the body, and the
+ * file in records/ repeats them at the top level only for readability. Without
  * that, the record's date and label would sit outside the seal.
  */
-export async function proximoHash(
-  hashAnterior: string | null,
-  corpo: unknown,
+export async function nextHash(
+  previousHash: string | null,
+  body: unknown,
 ): Promise<string> {
   return sha256Hex(
-    canonico({ corpo, hash_anterior: hashAnterior ?? GENESIS }),
+    canonical({ body, previous_hash: previousHash ?? GENESIS }),
   );
 }
 
@@ -148,30 +148,30 @@ export async function proximoHash(
  * from the database, where a record in the middle can be missing, and "the third
  * one you showed me" is a more honest claim than "record 3".
  */
-export async function verificarCadeia(registros: Registro[]): Promise<number> {
-  let anterior: string | null = null;
-  for (let i = 0; i < registros.length; i++) {
-    const r = registros[i];
-    const esperadoAnterior = i === 0 ? (r.hash_anterior ?? GENESIS) : anterior;
-    if ((r.hash_anterior ?? GENESIS) !== (esperadoAnterior ?? GENESIS)) return i;
-    const recalculado = await proximoHash(r.hash_anterior, r.corpo);
-    if (recalculado !== r.hash) return i;
-    anterior = r.hash;
+export async function verifyChain(records: ChainRecord[]): Promise<number> {
+  let previous: string | null = null;
+  for (let i = 0; i < records.length; i++) {
+    const r = records[i];
+    const expectedPrevious = i === 0 ? (r.previous_hash ?? GENESIS) : previous;
+    if ((r.previous_hash ?? GENESIS) !== (expectedPrevious ?? GENESIS)) return i;
+    const recalculated = await nextHash(r.previous_hash, r.body);
+    if (recalculated !== r.hash) return i;
+    previous = r.hash;
   }
   return -1;
 }
 
 /** Readable reason for the broken link — so the audit page can say what happened
  *  instead of showing a raw index. */
-export async function motivoQuebra(
-  registros: Registro[],
+export async function breakReason(
+  records: ChainRecord[],
   i: number,
 ): Promise<string> {
-  const r = registros[i];
-  if (!r) return "indice fora da lista";
-  const recalculado = await proximoHash(r.hash_anterior, r.corpo);
-  if (recalculado !== r.hash) {
-    return `o corpo do registro nao produz o hash declarado: calculado ${recalculado}, declarado ${r.hash}. O conteudo foi alterado depois de publicado.`;
+  const r = records[i];
+  if (!r) return "index outside the list";
+  const recalculated = await nextHash(r.previous_hash, r.body);
+  if (recalculated !== r.hash) {
+    return `the record's body does not produce the declared hash: computed ${recalculated}, declared ${r.hash}. The content was altered after it was published.`;
   }
-  return `o registro aponta para ${r.hash_anterior ?? "(nada)"}, mas o anterior nesta lista tem hash ${registros[i - 1]?.hash ?? "(nenhum)"}. Ou falta um registro no meio, ou a ordem foi trocada.`;
+  return `the record points at ${r.previous_hash ?? "(nothing)"}, but the previous one in this list has hash ${records[i - 1]?.hash ?? "(none)"}. Either a record is missing in the middle, or the order was swapped.`;
 }

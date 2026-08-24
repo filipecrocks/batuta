@@ -11,9 +11,9 @@
 //!     "o que que e isso" would match half the library.
 
 /// Prefix indexed alongside the exact term for words above this length.
-pub const PREFIXO: usize = 5;
+pub const PREFIX_LEN: usize = 5;
 
-const COLA: &[&str] = &[
+const GLUE_WORDS: &[&str] = &[
     // portuguese
     "a", "ao", "aos", "as", "ate", "com", "como", "da", "das", "de", "dele", "dela", "deles", "do",
     "dos", "e", "ela", "ele", "eles", "em", "essa", "esse", "esta", "este", "eu", "faz", "fazer",
@@ -30,13 +30,13 @@ const COLA: &[&str] = &[
     "with", "would", "you", "your",
 ];
 
-fn e_cola(t: &str) -> bool {
-    COLA.contains(&t)
+fn is_glue(t: &str) -> bool {
+    GLUE_WORDS.contains(&t)
 }
 
 /// Lowercase + accent removed, one character at a time. Covers the extended Latin-1
 /// range that shows up in pt/es/fr; everything else passes through as-is.
-fn dobrar(c: char) -> char {
+fn fold_char(c: char) -> char {
     let c = c.to_ascii_lowercase();
     match c {
         'á' | 'à' | 'â' | 'ã' | 'ä' | 'å' | 'Á' | 'À' | 'Â' | 'Ã' | 'Ä' | 'Å' => 'a',
@@ -47,11 +47,11 @@ fn dobrar(c: char) -> char {
         'ç' | 'Ç' => 'c',
         'ñ' | 'Ñ' => 'n',
         'ý' | 'ÿ' | 'Ý' => 'y',
-        outro => {
-            if outro.is_uppercase() {
-                outro.to_lowercase().next().unwrap_or(outro)
+        other => {
+            if other.is_uppercase() {
+                other.to_lowercase().next().unwrap_or(other)
             } else {
-                outro
+                other
             }
         }
     }
@@ -60,44 +60,44 @@ fn dobrar(c: char) -> char {
 /// Splits the text into terms that are already normalized, already free of glue words,
 /// already with the 5-letter prefix added to the exact term. It's the same path for
 /// indexing and for querying — if the two ends diverge, the router lies.
-pub fn termos(texto: &str) -> Vec<String> {
-    let mut saida = Vec::new();
-    let mut atual = String::new();
+pub fn terms(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current = String::new();
 
-    for ch in texto.chars() {
-        let c = dobrar(ch);
+    for ch in text.chars() {
+        let c = fold_char(ch);
         if c.is_ascii_alphanumeric() {
-            atual.push(c);
+            current.push(c);
         } else {
-            empurrar(&mut saida, &mut atual);
+            push_term(&mut out, &mut current);
         }
     }
-    empurrar(&mut saida, &mut atual);
-    saida
+    push_term(&mut out, &mut current);
+    out
 }
 
-fn empurrar(saida: &mut Vec<String>, atual: &mut String) {
-    if atual.is_empty() {
+fn push_term(out: &mut Vec<String>, current: &mut String) {
+    if current.is_empty() {
         return;
     }
-    let t = std::mem::take(atual);
-    if t.len() < 2 || e_cola(&t) {
+    let t = std::mem::take(current);
+    if t.len() < 2 || is_glue(&t) {
         return;
     }
     // a standalone number routes nothing — 2024, 300, v1 are left out
     if t.chars().all(|c| c.is_ascii_digit()) {
         return;
     }
-    if t.len() > PREFIXO {
-        saida.push(t[..PREFIXO].to_string());
+    if t.len() > PREFIX_LEN {
+        out.push(t[..PREFIX_LEN].to_string());
     }
-    saida.push(t);
+    out.push(t);
 }
 
 /// Cuts the text down to at most `n` terms. A long SKILL.md body can't dominate the
 /// index just by being long — the BM25 B=0.75 already penalizes long documents, this
 /// here is the second belt.
-pub fn primeiros(mut v: Vec<String>, n: usize) -> Vec<String> {
+pub fn take_first(mut v: Vec<String>, n: usize) -> Vec<String> {
     if v.len() > n {
         v.truncate(n);
     }

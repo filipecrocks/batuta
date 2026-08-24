@@ -1,18 +1,18 @@
 {
   "name": "batuta",
   "version": "0.1.0",
-  "description": "Camada aberta de medicao de Agent Skills — mede se a skill funciona, a que custo, em qual modelo. Local, em milissegundos.",
-  "//": "os e cpu ficam LIVRES de proposito: o postinstall e quem decide o alvo e diz na cara qual plataforma nao tem binario. Travar aqui so trocaria uma mensagem clara por um EBADPLATFORM.",
+  "description": "Open measurement layer for Agent Skills — measures whether a skill works, at what cost, on which model. Local, in milliseconds.",
+  "//": "os and cpu are left FREE on purpose: postinstall is what decides the target and states plainly which platform has no binary. Locking it here would just trade a clear message for an EBADPLATFORM.",
   "bin": {
     "batuta": "bin/batuta.js"
   },
   "scripts": {
-    "postinstall": "node instalar.js"
+    "postinstall": "node install.js"
   },
   "files": [
     "bin/batuta.js",
-    "instalar.js",
-    "registro.js"
+    "install.js",
+    "registry.js"
   ],
   "keywords": [
     "agent-skills",

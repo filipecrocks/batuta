@@ -196,7 +196,7 @@ export function markdown(fonte: string): string {
   return saida.join("\n");
 }
 
-/** Reads a document from `portal/conteudo/`, populated by `script/sincronizar-conteudo.mjs`. */
+/** Reads a document from `portal/conteudo/`, populated by `script/sync-content.mjs`. */
 export function documento(nome: string): string {
   try {
     return readFileSync(join(process.cwd(), "conteudo", nome), "utf8");

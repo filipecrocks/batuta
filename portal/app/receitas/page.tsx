@@ -1,4 +1,4 @@
-import { receitasPublicadas } from "@/lib/db";
+import { publishedRecipes } from "@/lib/db";
 
 export const revalidate = 3600;
 export const metadata = {
@@ -8,7 +8,7 @@ export const metadata = {
 };
 
 export default async function Receitas() {
-  const receitas = await receitasPublicadas();
+  const receitas = await publishedRecipes();
 
   return (
     <section className="faixa" style={{ paddingTop: "3rem" }}>
@@ -44,21 +44,21 @@ export default async function Receitas() {
           </div>
         ) : (
           receitas.map((r) => (
-            <div className="cartao" key={`${r.slug}-${r.versao}`}>
+            <div className="cartao" key={`${r.slug}-${r.version}`}>
               <h4>
                 <span className="mono">
-                  {r.slug} v{r.versao}
+                  {r.slug} v{r.version}
                 </span>
               </h4>
               {r.persona && <p className="miudo">{r.persona}</p>}
               <pre>
                 <code>{JSON.stringify(r.skills, null, 2)}</code>
               </pre>
-              {r.evidencia ? (
+              {r.evidence ? (
                 <>
                   <span className="etiqueta medido">evidência</span>
                   <pre>
-                    <code>{JSON.stringify(r.evidencia, null, 2)}</code>
+                    <code>{JSON.stringify(r.evidence, null, 2)}</code>
                   </pre>
                 </>
               ) : null}

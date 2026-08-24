@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batuta.space/schema/daily-summary.schema.json",
+  "title": "Batuta's aggregated daily summary",
+  "description": "The ONLY format that leaves the user's machine, and only with explicit opt-in (`batuta config upload yes`). One line per skill per day, produced by `batuta summary --day YYYY-MM-DD` (record.rs, fn daily_summary). Contains no prompt, prompt hash, turn id, file path, username, IP, or geolocation — if any of these show up in the body, it's a client bug and the ingest rejects it. Field for field identical to what `crates/batuta/src/record.rs` serializes via `json::write` (keys in alphabetical order, no spaces).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "day",
+    "installation",
+    "batuta_version",
+    "mode",
+    "routes",
+    "routes_suggested",
+    "routes_holdout",
+    "suggested_arm",
+    "holdout_arm",
+    "declared_bias",
+    "skills"
+  ],
+  "properties": {
+    "schema": {
+      "const": "batuta.daily_summary.v1",
+      "description": "Format version. If the set of fields changes, the suffix changes — historical series don't get silently patched."
+    },
+    "day": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "Aggregated UTC day (data::day_utc). UTC, not local timezone: local timezone leaks an approximation of where the person is."
+    },
+    "installation": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$",
+      "description": "sha256('installation|'+salt)[..16] (home::installation_id). Derived from the local salt: carries no hostname, username, or path. Only serves to say 'these lines came from the same machine'."
+    },
+    "batuta_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "CARGO_PKG_VERSION of the binary that generated the line. Without this, comparing days across different versions is comparing different rulers."
+    },
+    "mode": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the aggregated data came from. Today the CLI writes 'local'; 'degraded' marks data collected via MCP (§4.1), where there is no hook and the funnel is incomplete.",
+      "examples": ["local", "degraded"]
+    },
+    "routes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Turns seen by the router during the day (funnel denominator)."
+    },
+    "routes_suggested": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Turns in which the router spoke. routes - routes_suggested = silence (which is a desirable result, not a failure)."
+    },
+    "routes_holdout": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Turns in which the router stayed silent ON PURPOSE (§6). It's the control group; without it, lift measures correlation."
+    },
+    "suggested_arm": {
+      "$ref": "#/$defs/arm",
+      "description": "Outcome of the turns in which the router spoke."
+    },
+    "holdout_arm": {
+      "$ref": "#/$defs/arm",
+      "description": "Outcome of the holdout turns. Comparing with suggested_arm gives the causal lift."
+    },
+    "declared_bias": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Fixed phrase that travels along with the data (§1.5). The bias doesn't become a footnote on the site: it stays glued to the line."
+    },
+    "skills": {
+      "type": "array",
+      "description": "One entry per skill suggested during the day, in alphabetical order (Rust's BTreeMap). Empty is a legitimate response: a day with no routes.",
+      "items": { "$ref": "#/$defs/skill" }
+    }
+  },
+  "$defs": {
+    "arm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "n"],
+      "properties": {
+        "ok": { "type": "integer", "minimum": 0, "description": "Turns judged to have ended well." },
+        "n": { "type": "integer", "minimum": 0, "description": "Turns judged in the arm. A small n is reason not to publish a conclusion." }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill",
+        "version",
+        "routes",
+        "activations",
+        "user_activations",
+        "turns_judged",
+        "turns_ok",
+        "reprompts",
+        "errors",
+        "retries",
+        "tokens_in",
+        "tokens_out",
+        "cost_usd",
+        "median_turns_to_completion",
+        "ghost"
+      ],
+      "properties": {
+        "skill": { "type": "string", "minLength": 1, "description": "Skill name as it appears in the local frontmatter." },
+        "version": { "type": "string", "description": "Version declared by the skill. Empty string when the skill doesn't version itself — and that, in itself, is data about the quality of the ecosystem." },
+        "routes": { "type": "integer", "minimum": 0, "description": "Number of times the router suggested this skill." },
+        "activations": { "type": "integer", "minimum": 0, "description": "Number of times the skill actually fired. activations ÷ routes is the trigger rate (§4.4)." },
+        "user_activations": { "type": "integer", "minimum": 0, "description": "Subset of activations triggered by the user, not by the model (OTEL event claude_code.skill_activated)." },
+        "turns_judged": { "type": "integer", "minimum": 0 },
+        "turns_ok": { "type": "integer", "minimum": 0, "description": "turns_ok ≤ turns_judged. The denominator travels along on purpose: a rate without n isn't a number." },
+        "reprompts": { "type": "integer", "minimum": 0, "description": "Hard proxy for a bad outcome — doesn't depend on the judge." },
+        "errors": { "type": "integer", "minimum": 0 },
+        "retries": { "type": "integer", "minimum": 0 },
+        "tokens_in": { "type": "number", "minimum": 0 },
+        "tokens_out": { "type": "number", "minimum": 0 },
+        "cost_usd": { "type": "number", "minimum": 0, "description": "Sum for the day. Divided by turns_ok it becomes cost per completed task — the metric nobody else has (§4.4)." },
+        "median_turns_to_completion": { "type": "number", "minimum": 0, "description": "Median, not average: one outlier turn with 40 back-and-forths shouldn't drag the number." },
+        "ghost": { "type": "boolean", "description": "routes ≥ 5 and activations = 0. A skill the router keeps suggesting that nobody uses." }
+      }
+    }
+  }
+}

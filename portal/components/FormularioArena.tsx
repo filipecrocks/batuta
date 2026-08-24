@@ -20,22 +20,21 @@ export function FormularioArena() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          enunciado: dados.get("enunciado"),
-          categoria: dados.get("categoria"),
-          contato: dados.get("contato") || null,
+          statement: dados.get("enunciado"),
+          category: dados.get("categoria"),
+          contact: dados.get("contato") || null,
         }),
       });
       const corpo = await r.json().catch(() => ({}));
       if (r.ok) {
         setEstado("ok");
         setRecado(
-          corpo.mensagem ??
-            "Recebido. A tarefa entra na triagem e vai ser reescrita em formato canônico antes de rodar.",
+          "Recebido. A tarefa entra na triagem e vai ser reescrita em formato canônico antes de rodar.",
         );
         (e.target as HTMLFormElement).reset();
       } else {
         setEstado("erro");
-        setRecado(corpo.motivo ?? corpo.erro ?? `Não deu (HTTP ${r.status}).`);
+        setRecado(corpo.reason ?? corpo.error ?? `Não deu (HTTP ${r.status}).`);
       }
     } catch {
       setEstado("erro");
@@ -57,13 +56,13 @@ export function FormularioArena() {
       />
 
       <label htmlFor="categoria">Categoria</label>
-      <select id="categoria" name="categoria" defaultValue="codigo">
-        <option value="codigo">código</option>
-        <option value="escrita">escrita</option>
-        <option value="dados">dados</option>
-        <option value="documentos">documentos</option>
-        <option value="pesquisa">pesquisa</option>
-        <option value="automacao">automação</option>
+      <select id="categoria" name="categoria" defaultValue="code">
+        <option value="code">código</option>
+        <option value="writing">escrita</option>
+        <option value="data">dados</option>
+        <option value="documents">documentos</option>
+        <option value="research">pesquisa</option>
+        <option value="automation">automação</option>
       </select>
 
       <label htmlFor="contato">

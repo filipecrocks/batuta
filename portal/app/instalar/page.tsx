@@ -15,7 +15,7 @@ export default function Instalar() {
 
         <h3>caminho 1 — curl</h3>
         <pre>
-          <code>curl -fsSL https://batuta.space/instalar.sh | sh</code>
+          <code>curl -fsSL https://batuta.space/install.sh | sh</code>
         </pre>
         <p className="miudo">
           O script detecta seu sistema, baixa o binário da última release do GitHub e{" "}

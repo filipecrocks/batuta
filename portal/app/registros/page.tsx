@@ -1,4 +1,4 @@
-import { ultimosRegistros } from "@/lib/db";
+import { latestRecords } from "@/lib/db";
 
 export const revalidate = 900;
 export const metadata = {
@@ -8,7 +8,7 @@ export const metadata = {
 };
 
 export default async function Registros() {
-  const registros = await ultimosRegistros(20);
+  const registros = await latestRecords(20);
 
   return (
     <section className="faixa" style={{ paddingTop: "3rem" }}>
@@ -36,11 +36,11 @@ export default async function Registros() {
           <p>
             A corrente vive em{" "}
             <a
-              href="https://github.com/filipecrocks/batuta/tree/main/registros"
+              href="https://github.com/filipecrocks/batuta/tree/main/records"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span className="mono">registros/</span> no repositório público
+              <span className="mono">records/</span> no repositório público
             </a>
             . Reescrever a história de um repo com forks e clones é ruidoso de um jeito
             que não passa despercebido.
@@ -88,8 +88,8 @@ export default async function Registros() {
                 {registros.map((r) => (
                   <tr key={r.id}>
                     <td className="mono">{r.id}</td>
-                    <td className="mono">{r.tipo}</td>
-                    <td className="miudo">{new Date(r.criado_em).toISOString().slice(0, 16).replace("T", " ")}</td>
+                    <td className="mono">{r.type}</td>
+                    <td className="miudo">{new Date(r.created_at).toISOString().slice(0, 16).replace("T", " ")}</td>
                     <td>
                       <div className="hash">{r.hash}</div>
                     </td>
@@ -104,7 +104,7 @@ export default async function Registros() {
         <pre>
           <code>{`git clone https://github.com/filipecrocks/batuta
 cd batuta
-node script/cadeia.mjs verificar`}</code>
+node script/chain.mjs verify`}</code>
         </pre>
         <p className="miudo">
           O comando percorre a corrente inteira e diz exatamente onde ela quebra, se

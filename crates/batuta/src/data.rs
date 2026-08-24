@@ -1,17 +1,17 @@
 //! Dependency-free date: epoch -> YYYY-MM-DD in UTC.
 //! civil_from_days algorithm by Howard Hinnant, public domain.
 
-pub fn dia_utc(epoch: u64) -> String {
-    let (a, m, d) = civil(epoch as i64 / 86_400);
-    format!("{:04}-{:02}-{:02}", a, m, d)
+pub fn day_utc(epoch: u64) -> String {
+    let (y, m, d) = civil(epoch as i64 / 86_400);
+    format!("{:04}-{:02}-{:02}", y, m, d)
 }
 
-pub fn instante_utc(epoch: u64) -> String {
-    let dia = dia_utc(epoch);
+pub fn instant_utc(epoch: u64) -> String {
+    let day = day_utc(epoch);
     let s = epoch % 86_400;
     format!(
         "{}T{:02}:{:02}:{:02}Z",
-        dia,
+        day,
         s / 3600,
         (s % 3600) / 60,
         s % 60
@@ -35,10 +35,10 @@ fn civil(z: i64) -> (i64, u32, u32) {
 mod t {
     use super::*;
     #[test]
-    fn marcos() {
-        assert_eq!(dia_utc(0), "1970-01-01");
-        assert_eq!(dia_utc(1_000_000_000), "2001-09-09");
-        assert_eq!(dia_utc(1_756_000_000), "2025-08-24");
-        assert_eq!(instante_utc(0), "1970-01-01T00:00:00Z");
+    fn milestones() {
+        assert_eq!(day_utc(0), "1970-01-01");
+        assert_eq!(day_utc(1_000_000_000), "2001-09-09");
+        assert_eq!(day_utc(1_756_000_000), "2025-08-24");
+        assert_eq!(instant_utc(0), "1970-01-01T00:00:00Z");
     }
 }
