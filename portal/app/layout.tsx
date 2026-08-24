@@ -1,5 +1,30 @@
 import type { Metadata } from "next";
+import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
+import { Marca } from "../components/Marca";
 import "./globals.css";
+
+/* As três vozes da casa, servidas pelo próprio domínio (next/font baixa e hospeda):
+   nenhuma requisição sai para o Google em runtime, e não há salto de fonte na carga.
+   - serif  para o que AFIRMA (títulos, o nome)
+   - sans   para o que EXPLICA (prosa)
+   - mono   para o que MEDE (número, rótulo, comando, hash) */
+const serif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+  display: "swap",
+  variable: "--fonte-serif",
+});
+const sans = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--fonte-sans",
+});
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--fonte-mono",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://batuta.space"),
@@ -18,7 +43,17 @@ export const metadata: Metadata = {
     description:
       "Não é o 27º roteador do mercado. É o juiz — e funciona com qualquer roteador.",
   },
+  icons: {
+    icon: [
+      { url: "/icone.svg", type: "image/svg+xml" },
+    ],
+  },
   robots: { index: true, follow: true },
+};
+
+export const viewport = {
+  themeColor: "#08090a",
+  colorScheme: "dark" as const,
 };
 
 const NAVEGACAO: [string, string][] = [
@@ -30,25 +65,31 @@ const NAVEGACAO: [string, string][] = [
   ["/instalar", "Instalar"],
 ];
 
+const PE: [string, string][] = [
+  ["/manifesto", "Manifesto"],
+  ["/privacidade", "Privacidade"],
+  ["/registros", "Registros verificáveis"],
+  ["/spec", "Spec"],
+  ["/creditos", "Créditos"],
+  ["/doar", "Doar"],
+];
+
 export default function RaizLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html
+      lang="pt-BR"
+      className={`${serif.variable} ${sans.variable} ${mono.variable}`}
+    >
       <body>
         <div className="casca">
           <header className="topo">
             <div className="topo-in">
               <a className="marca" href="/">
-                <span>▍</span>Batuta<small>medição aberta</small>
+                <Marca tamanho={26} />
+                <span className="marca-texto">Batuta</span>
+                <span className="marca-nota">medição aberta</span>
               </a>
-              <nav>
+              <nav aria-label="Seções">
                 {NAVEGACAO.map(([href, texto]) => (
                   <a key={href} href={href}>
                     {texto}
@@ -62,12 +103,16 @@ export default function RaizLayout({ children }: { children: React.ReactNode }) 
 
           <footer>
             <div className="centro-largo">
-              <nav>
-                <a href="/manifesto">Manifesto</a>
-                <a href="/privacidade">Privacidade</a>
-                <a href="/registros">Registros verificáveis</a>
-                <a href="/creditos">Créditos</a>
-                <a href="/doar">Doar</a>
+              <div className="marca-pe">
+                <Marca tamanho={20} tom="chapado" />
+                <span>Batuta</span>
+              </div>
+              <nav aria-label="Rodapé">
+                {PE.map(([href, texto]) => (
+                  <a key={href} href={href}>
+                    {texto}
+                  </a>
+                ))}
                 <a
                   href="https://github.com/filipecrocks/batuta"
                   target="_blank"
@@ -76,7 +121,7 @@ export default function RaizLayout({ children }: { children: React.ReactNode }) 
                   Código
                 </a>
               </nav>
-              <p style={{ marginTop: "1.2rem", maxWidth: "40rem" }}>
+              <p style={{ marginTop: "1.3rem", maxWidth: "40rem" }}>
                 O Batuta não vende skill, não vende modelo e não vende SaaS. Ninguém
                 ganha dinheiro aqui — nem fundadores, nem colaboradores. O número não
                 tem por que mentir.

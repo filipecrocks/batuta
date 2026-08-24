@@ -1,26 +1,40 @@
 /* Batuta — folha única. Sem framework: o portal inteiro é estático e a CSS que ele
-   carrega tem que caber na cabeça de quem for auditar. */
+   carrega tem que caber na cabeça de quem for auditar.
+
+   Regra de composição desta folha: profundidade vem de CAMADA e de LUZ, nunca de
+   sombra pesada. Um instrumento de medição não é um cartão de visita — ele é fosco,
+   tem marcação fina e só brilha onde importa. */
 
 :root {
-  --tinta:      #0a0b0c;
-  --tinta-2:    #101315;
-  --tinta-3:    #171b1e;
-  --linha:      #262c31;
-  --linha-2:    #363e45;
-  --texto:      #e9e7e2;
+  /* ---- tinta: cinco camadas, do fundo à superfície mais alta ---- */
+  --tinta:      #08090a;
+  --tinta-2:    #0d0f11;
+  --tinta-3:    #121517;
+  --tinta-4:    #171b1e;
+  --linha:      #21262a;
+  --linha-2:    #2f363c;
+  --linha-3:    #454e56;
+
+  --texto:      #eceae5;
   --texto-2:    #9aa2a9;
   --texto-3:    #6b747c;
+  --texto-4:    #4c545b;
+
   --acento:     #e5a13c;
+  --acento-alto:#f6c574;
   --acento-sub: #3a2c14;
+  --acento-vidro: color-mix(in srgb, var(--acento) 9%, transparent);
   --medido:     #71c191;
   --alerta:     #e2705c;
 
-  --serif: "Instrument Serif", "Iowan Old Style", Georgia, "Times New Roman", serif;
-  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --serif: var(--fonte-serif), "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --sans: var(--fonte-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: var(--fonte-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --col: 42rem;
   --largo: 68rem;
+  --raio: 12px;
+  --raio-p: 8px;
 }
 
 * { box-sizing: border-box; }
@@ -36,37 +50,54 @@ body {
   color: var(--texto);
   font-family: var(--sans);
   font-size: 17px;
-  line-height: 1.65;
+  line-height: 1.68;
+  letter-spacing: -0.003em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  font-synthesis-weight: none;
 }
+
+/* A luz da sala. Fica presa no fundo, atrás de tudo, e não rola com a página —
+   é iluminação, não elemento. Um só gradiente, quente, no alto. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(60rem 34rem at 18% -8%, color-mix(in srgb, var(--acento) 7%, transparent), transparent 70%),
+    radial-gradient(48rem 30rem at 92% 4%, color-mix(in srgb, #4a7fb5 5%, transparent), transparent 72%);
+}
+body > * { position: relative; z-index: 1; }
+
+::selection { background: color-mix(in srgb, var(--acento) 30%, transparent); color: #fff; }
+
+:focus-visible { outline: 2px solid var(--acento); outline-offset: 3px; border-radius: 3px; }
 
 /* ------------------------------------------------------------------ estrutura */
 
 .casca { min-height: 100dvh; display: flex; flex-direction: column; }
 main { flex: 1; }
 
-.faixa {
-  width: 100%;
-  padding: 0 1.5rem;
-}
+.faixa { width: 100%; padding: 0 1.5rem; }
 .centro { max-width: var(--largo); margin: 0 auto; }
-/* A coluna de leitura tem 42rem, mas alinhada a ESQUERDA dentro dos mesmos 68rem do
-   cabecalho — assim o texto comeca exatamente embaixo da marca, e nao flutuando no
+/* A coluna de leitura tem 42rem, mas alinhada à ESQUERDA dentro dos mesmos 68rem do
+   cabeçalho — assim o texto começa exatamente embaixo da marca, e não flutuando no
    meio da tela. */
 .centro > * { max-width: var(--col); }
 .centro > .placar, .centro > .rolagem { max-width: var(--col); }
 .centro-largo { max-width: var(--largo); margin: 0 auto; }
-/* Na pagina larga so a TABELA usa os 68rem. Prosa em linha de 120 caracteres cansa
-   o olho, e a pagina do ranking tem prosa importante — o vies declarado. */
+/* Na página larga só a TABELA usa os 68rem. Prosa em linha de 120 caracteres cansa
+   o olho, e a página do ranking tem prosa importante — o viés declarado. */
 .centro-largo > *:not(.rolagem) { max-width: var(--col); }
 
 /* --------------------------------------------------------------------- topo */
 
 .topo {
   border-bottom: 1px solid var(--linha);
-  background: color-mix(in srgb, var(--tinta) 88%, transparent);
-  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--tinta) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
   position: sticky;
   top: 0;
   z-index: 20;
@@ -76,195 +107,406 @@ main { flex: 1; }
   margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 1.25rem;
-  padding: 0.85rem 1.5rem;
-  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 0.8rem 1.5rem;
 }
 .marca {
-  font-family: var(--serif);
-  font-size: 1.4rem;
-  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
   color: var(--texto);
   text-decoration: none;
   margin-right: auto;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.5rem;
+  flex: none;
 }
-.marca span { color: var(--acento); }
-.marca small {
+.marca-sinal { display: block; flex: none; }
+.marca-texto {
+  font-family: var(--serif);
+  font-size: 1.45rem;
+  line-height: 1;
+  letter-spacing: 0.005em;
+}
+.marca-nota {
   font-family: var(--mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.14em;
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--texto-3);
+  color: var(--texto-4);
+  border-left: 1px solid var(--linha-2);
+  padding-left: 0.6rem;
+  margin-left: 0.15rem;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
 }
+.marca:hover .marca-texto { color: #fff; }
+
+/* A nota ao lado do nome é a primeira coisa a sair quando o espaço aperta — antes
+   de a navegação começar a ser cortada pela máscara. */
+@media (max-width: 1080px) { .marca-nota { display: none; } }
+@media (max-width: 900px)  { .topo nav { gap: 1.1rem; font-size: 0.84rem; } }
+
+/* Navegação: UMA linha, sempre. No celular ela rola no eixo x em vez de quebrar e
+   deixar um item órfão na segunda linha. */
 .topo nav {
   display: flex;
-  gap: 1.1rem;
-  flex-wrap: wrap;
-  font-size: 0.86rem;
+  gap: 1.35rem;
+  font-size: 0.875rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+/* A máscara só existe onde a navegação PODE transbordar. Aplicada sempre, ela apaga
+   a última letra do último item mesmo numa tela larga onde tudo coube. */
+@media (max-width: 900px) {
+  .topo nav {
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 1.5rem), transparent 100%);
+  }
+}
+.topo nav::-webkit-scrollbar { display: none; }
 .topo nav a {
   color: var(--texto-2);
   text-decoration: none;
-  padding: 0.15rem 0;
-  border-bottom: 1px solid transparent;
+  white-space: nowrap;
+  padding: 0.3rem 0;
+  position: relative;
+  transition: color 0.15s ease;
 }
-.topo nav a:hover { color: var(--texto); border-bottom-color: var(--acento); }
+.topo nav a::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: var(--acento);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.18s ease;
+}
+.topo nav a:hover { color: var(--texto); }
+.topo nav a:hover::after { transform: scaleX(1); }
 
 /* --------------------------------------------------------------- tipografia */
 
-h1, h2, h3, h4 { font-weight: 400; line-height: 1.15; margin: 0 0 0.6em; }
-h1 { font-family: var(--serif); font-size: clamp(2.4rem, 7vw, 3.6rem); letter-spacing: -0.01em; }
-h2 { font-family: var(--serif); font-size: clamp(1.7rem, 4.5vw, 2.2rem); margin-top: 2.4em; }
+h1, h2, h3, h4 { font-weight: 400; line-height: 1.14; margin: 0 0 0.6em; }
+h1 {
+  font-family: var(--serif);
+  font-size: clamp(2.6rem, 7.6vw, 4.1rem);
+  letter-spacing: -0.018em;
+  line-height: 1.06;
+  text-wrap: balance;
+}
+h2 {
+  font-family: var(--serif);
+  font-size: clamp(1.85rem, 4.6vw, 2.4rem);
+  letter-spacing: -0.012em;
+  margin-top: 2.6em;
+  text-wrap: balance;
+}
 h3 {
   font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.16em;
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--acento);
-  margin-top: 2.6em;
+  margin-top: 2.8em;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
 }
-h4 { font-size: 1.05rem; font-weight: 600; margin-top: 1.8em; }
+/* O traço que sai do rótulo e morre — a marcação da régua. */
+h3::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--acento-sub), transparent);
+}
+h4 { font-size: 1.06rem; font-weight: 600; letter-spacing: -0.006em; margin-top: 1.9em; }
 p { margin: 0 0 1.15em; }
-a { color: var(--texto); text-decoration-color: color-mix(in srgb, var(--acento) 55%, transparent); text-underline-offset: 3px; }
+a {
+  color: var(--texto);
+  text-decoration-color: color-mix(in srgb, var(--acento) 50%, transparent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color 0.15s ease;
+}
 a:hover { text-decoration-color: var(--acento); }
 strong { font-weight: 600; color: #fff; }
 em { font-style: italic; color: var(--texto-2); }
-hr { border: 0; border-top: 1px solid var(--linha); margin: 3rem 0; }
 ul, ol { margin: 0 0 1.15em; padding-left: 1.3em; }
-li { margin-bottom: 0.4em; }
-li::marker { color: var(--texto-3); }
+li { margin-bottom: 0.45em; }
+li::marker { color: var(--texto-4); }
+
+/* Régua: não é um <hr> genérico, é a marcação do instrumento. */
+hr {
+  border: 0;
+  height: 1px;
+  margin: 3.5rem 0;
+  background: linear-gradient(90deg, var(--linha-2), var(--linha) 30%, transparent);
+}
+
 blockquote {
-  margin: 1.6em 0;
-  padding: 0.2em 0 0.2em 1.2em;
+  margin: 1.7em 0;
+  padding: 0.1em 0 0.1em 1.3em;
   border-left: 2px solid var(--acento);
   color: var(--texto-2);
+  font-size: 1.02em;
 }
 blockquote p:last-child { margin-bottom: 0; }
+
 code {
   font-family: var(--mono);
   font-size: 0.85em;
   background: var(--tinta-3);
   border: 1px solid var(--linha);
-  border-radius: 4px;
-  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  padding: 0.12em 0.38em;
+  color: var(--texto);
 }
 pre {
   font-family: var(--mono);
   font-size: 0.8rem;
-  line-height: 1.6;
-  background: var(--tinta-2);
+  line-height: 1.65;
+  background: linear-gradient(180deg, var(--tinta-3), var(--tinta-2));
   border: 1px solid var(--linha);
-  border-radius: 8px;
-  padding: 1rem 1.1rem;
+  border-radius: var(--raio);
+  padding: 1.1rem 1.2rem;
   overflow-x: auto;
-  margin: 1.5em 0;
+  margin: 1.6em 0;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent);
 }
 pre code { background: none; border: 0; padding: 0; font-size: inherit; }
 
-.rolagem { overflow-x: auto; margin: 1.6em 0; }
+.rolagem { overflow-x: auto; margin: 1.7em 0; }
 table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-th, td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--linha); vertical-align: top; }
+th, td { text-align: left; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--linha); vertical-align: top; }
+td { font-variant-numeric: tabular-nums; }
 th {
   font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
+  font-size: 0.66rem;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--texto-3);
   font-weight: 400;
   border-bottom-color: var(--linha-2);
   white-space: nowrap;
 }
+tbody tr { transition: background 0.12s ease; }
 tbody tr:hover { background: var(--tinta-2); }
 
 /* ------------------------------------------------------------------- peças */
 
-/* padding-block, nao shorthand: `padding: X 0` zeraria o respiro lateral que a
-   .faixa da, e no celular o texto encostaria na borda da tela. */
+/* padding-block, não shorthand: `padding: X 0` zeraria o respiro lateral que a
+   .faixa dá, e no celular o texto encostaria na borda da tela. */
 .chamada {
-  padding-block: clamp(3rem, 9vw, 6rem) clamp(2rem, 5vw, 3.5rem);
+  padding-block: clamp(3.5rem, 10vw, 7rem) clamp(2rem, 5vw, 3.5rem);
+  position: relative;
 }
-.olho {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--acento);
-  margin-bottom: 1.5rem;
+/* A chamada em duas colunas: a promessa à esquerda, a prova à direita. Abaixo de
+   62rem vira uma coluna só e o mostrador desce inteiro. */
+.chamada-grade {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.8rem;
+  align-items: start;
 }
-.linha-fina {
-  font-size: clamp(1.05rem, 2.6vw, 1.25rem);
-  color: var(--texto-2);
-  max-width: 34rem;
+.centro > .chamada-grade { max-width: var(--largo); }
+.chamada-grade > * { min-width: 0; }
+@media (min-width: 62rem) {
+  .chamada-grade { grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr); gap: 4rem; }
 }
 
-.botoes { display: flex; gap: 0.7rem; flex-wrap: wrap; margin: 2rem 0 0; }
+/* O mostrador: o relatório local, do jeito que ele sai no terminal de quem instala.
+   É exemplo, e a legenda embaixo diz isso — a régua deste projeto vale para ele
+   mesmo. */
+.leitor {
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  background: linear-gradient(180deg, var(--tinta-3), var(--tinta-2));
+  box-shadow: 0 24px 60px -34px #000, inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent);
+  overflow: hidden;
+}
+.leitor-topo {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.7rem 0.95rem;
+  border-bottom: 1px solid var(--linha);
+  background: color-mix(in srgb, var(--tinta-4) 70%, transparent);
+}
+.leitor-topo i {
+  width: 0.55rem; height: 0.55rem; border-radius: 50%;
+  background: var(--linha-3); display: block; flex: none;
+}
+.leitor-topo i:first-child { background: color-mix(in srgb, var(--acento) 65%, var(--linha-3)); }
+.leitor-topo b {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--texto-4);
+}
+.leitor pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-size: 0.71rem;
+  line-height: 1.72;
+  padding: 1.05rem 1.1rem;
+  color: var(--texto-2);
+}
+.leitor pre u { text-decoration: none; color: var(--texto); }
+.leitor pre s { text-decoration: none; color: var(--acento); }
+.leitor pre q { quotes: none; color: var(--texto-4); }
+.leitor-pe {
+  border-top: 1px solid var(--linha);
+  padding: 0.7rem 1.1rem 0.85rem;
+  font-size: 0.73rem;
+  line-height: 1.45;
+  color: var(--texto-4);
+}
+
+.olho {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--acento);
+  margin-bottom: 1.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.olho::before {
+  content: "";
+  width: 1.6rem;
+  height: 1px;
+  background: var(--acento);
+  flex: none;
+}
+.linha-fina {
+  font-size: clamp(1.08rem, 2.6vw, 1.28rem);
+  line-height: 1.6;
+  color: var(--texto-2);
+  max-width: 34rem;
+  text-wrap: pretty;
+}
+
+.botoes { display: flex; gap: 0.7rem; flex-wrap: wrap; margin: 2.2rem 0 0; }
 .botao {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   font-family: var(--mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-  padding: 0.65rem 1.1rem;
-  border-radius: 6px;
+  font-size: 0.79rem;
+  letter-spacing: 0.03em;
+  padding: 0.72rem 1.15rem;
+  border-radius: var(--raio-p);
   border: 1px solid var(--linha-2);
   color: var(--texto);
   text-decoration: none;
-  background: var(--tinta-2);
+  background: linear-gradient(180deg, var(--tinta-4), var(--tinta-2));
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
-.botao:hover { border-color: var(--acento); background: var(--tinta-3); }
-.botao-forte { background: var(--acento); color: #1a1204; border-color: var(--acento); font-weight: 600; }
-.botao-forte:hover { background: #f0b055; border-color: #f0b055; }
+.botao:hover { border-color: var(--linha-3); background: linear-gradient(180deg, #1c2126, var(--tinta-3)); }
+.botao:active { transform: translateY(1px); }
+.botao-forte {
+  background: linear-gradient(180deg, var(--acento-alto), var(--acento));
+  color: #241703;
+  border-color: color-mix(in srgb, var(--acento) 70%, #000);
+  font-weight: 600;
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 35%, transparent) inset,
+              0 6px 20px -8px color-mix(in srgb, var(--acento) 55%, transparent);
+}
+.botao-forte:hover { background: linear-gradient(180deg, #ffd58c, var(--acento-alto)); border-color: var(--acento-alto); }
 
+/* O placar: mostrador de instrumento. Números tabulares, hairline no topo, e o
+   zero honesto num cinza que NÃO tenta parecer resultado. */
 .placar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: 1px;
   background: var(--linha);
   border: 1px solid var(--linha);
-  border-radius: 10px;
+  border-radius: var(--raio);
   overflow: hidden;
-  margin: 2.5rem 0;
+  margin: 2.8rem 0;
+  box-shadow: 0 14px 40px -28px #000;
 }
-.placar div { background: var(--tinta-2); padding: 1.1rem 1.2rem; }
+.placar div {
+  background: linear-gradient(180deg, var(--tinta-3), var(--tinta-2));
+  padding: 1.15rem 1.25rem;
+  position: relative;
+}
+.placar div::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 1.25rem; right: 1.25rem;
+  height: 1px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--acento) 45%, transparent), transparent);
+}
 .placar b {
   display: block;
   font-family: var(--mono);
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   font-weight: 500;
   line-height: 1.1;
   color: var(--texto);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
-.placar b.vazio { color: var(--texto-3); }
+.placar b.vazio { color: var(--texto-4); }
 .placar span {
   display: block;
-  font-size: 0.74rem;
+  font-size: 0.73rem;
   color: var(--texto-3);
-  margin-top: 0.35rem;
-  line-height: 1.35;
+  margin-top: 0.4rem;
+  line-height: 1.4;
 }
 
 .cartao {
   border: 1px solid var(--linha);
-  border-radius: 10px;
-  padding: 1.4rem 1.5rem;
-  background: var(--tinta-2);
-  margin: 1.5rem 0;
+  border-radius: var(--raio);
+  padding: 1.5rem 1.6rem;
+  background: linear-gradient(180deg, var(--tinta-3), var(--tinta-2));
+  margin: 1.6rem 0;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent);
+  transition: border-color 0.18s ease;
 }
+.cartao:hover { border-color: var(--linha-2); }
 .cartao h4 { margin-top: 0; }
 .cartao p:last-child { margin-bottom: 0; }
+
+/* Cartão numerado — a peça 1, 2, 3 da home. O número é parte do desenho. */
+.cartao-num { position: relative; padding-left: 3.6rem; }
+.cartao-num::before {
+  content: attr(data-num);
+  position: absolute;
+  left: 1.5rem;
+  top: 1.45rem;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--acento);
+  border: 1px solid var(--acento-sub);
+  background: var(--acento-vidro);
+  border-radius: 6px;
+  width: 1.55rem;
+  height: 1.55rem;
+  display: grid;
+  place-items: center;
+}
 
 .aviso {
   border: 1px solid var(--acento-sub);
   border-left: 3px solid var(--acento);
-  background: color-mix(in srgb, var(--acento) 6%, var(--tinta-2));
-  border-radius: 8px;
-  padding: 1.1rem 1.3rem;
-  margin: 1.8rem 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--acento) 8%, var(--tinta-3)), var(--tinta-2));
+  border-radius: var(--raio-p);
+  padding: 1.15rem 1.35rem;
+  margin: 2rem 0;
   font-size: 0.95rem;
 }
 .aviso p:last-child { margin-bottom: 0; }
@@ -272,10 +514,10 @@ tbody tr:hover { background: var(--tinta-2); }
 .etiqueta {
   display: inline-block;
   font-family: var(--mono);
-  font-size: 0.64rem;
+  font-size: 0.63rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  padding: 0.2rem 0.5rem;
+  padding: 0.22rem 0.52rem;
   border-radius: 4px;
   border: 1px solid var(--linha-2);
   color: var(--texto-2);
@@ -286,13 +528,14 @@ tbody tr:hover { background: var(--tinta-2); }
 
 .vazio-de-verdade {
   border: 1px dashed var(--linha-2);
-  border-radius: 10px;
-  padding: 2rem 1.5rem;
+  border-radius: var(--raio);
+  padding: 2.4rem 1.6rem;
   text-align: center;
   color: var(--texto-2);
-  margin: 2rem 0;
+  margin: 2.2rem 0;
+  background: color-mix(in srgb, var(--tinta-2) 60%, transparent);
 }
-.vazio-de-verdade strong { display: block; color: var(--texto); margin-bottom: 0.4rem; }
+.vazio-de-verdade strong { display: block; color: var(--texto); margin-bottom: 0.45rem; }
 
 .mono { font-family: var(--mono); font-size: 0.85em; }
 .hash { font-family: var(--mono); font-size: 0.72rem; color: var(--texto-3); word-break: break-all; }
@@ -301,7 +544,7 @@ tbody tr:hover { background: var(--tinta-2); }
 /* ------------------------------------------------------------- formulário */
 
 form.arena { margin: 2rem 0; }
-label { display: block; font-size: 0.82rem; color: var(--texto-2); margin: 1.2rem 0 0.4rem; }
+label { display: block; font-size: 0.82rem; color: var(--texto-2); margin: 1.3rem 0 0.45rem; }
 input[type="text"], textarea, select {
   width: 100%;
   font-family: inherit;
@@ -309,10 +552,12 @@ input[type="text"], textarea, select {
   color: var(--texto);
   background: var(--tinta-2);
   border: 1px solid var(--linha-2);
-  border-radius: 7px;
-  padding: 0.65rem 0.8rem;
+  border-radius: var(--raio-p);
+  padding: 0.7rem 0.85rem;
+  transition: border-color 0.15s ease;
 }
-textarea { min-height: 9rem; resize: vertical; line-height: 1.55; }
+input[type="text"]:hover, textarea:hover, select:hover { border-color: var(--linha-3); }
+textarea { min-height: 9rem; resize: vertical; line-height: 1.58; }
 input:focus, textarea:focus, select:focus { outline: 2px solid var(--acento); outline-offset: 1px; border-color: transparent; }
 .resposta { margin-top: 1rem; font-size: 0.92rem; }
 .resposta.ok { color: var(--medido); }
@@ -322,27 +567,53 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--acento); ou
 
 footer {
   border-top: 1px solid var(--linha);
-  margin-top: 5rem;
-  padding: 2.5rem 1.5rem 3.5rem;
+  margin-top: 6rem;
+  padding: 3rem 1.5rem 4rem;
   font-size: 0.85rem;
   color: var(--texto-3);
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--tinta-2) 70%, transparent));
 }
 footer .topo-in { padding-inline: 0; }
-footer nav { display: flex; gap: 1rem; flex-wrap: wrap; }
+footer nav { display: flex; gap: 1.1rem 1.4rem; flex-wrap: wrap; }
 footer a { color: var(--texto-2); text-decoration: none; }
 footer a:hover { color: var(--texto); }
-footer .selo { margin-top: 1.2rem; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; }
+footer .marca-pe { display: flex; align-items: center; gap: 0.55rem; color: var(--texto-3); margin-bottom: 1.6rem; }
+footer .marca-pe span { font-family: var(--serif); font-size: 1.15rem; color: var(--texto-2); }
+footer .selo {
+  margin-top: 1.4rem;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--texto-4);
+}
+
+/* ---------------------------------------------------------------- celular */
 
 @media (max-width: 720px) {
-  body { font-size: 16px; }
-  .marca { font-size: 1.25rem; }
-  .marca small { display: none; }
-  .topo-in { padding: 0.7rem 1.25rem; gap: 0.5rem 0.9rem; }
-  .topo nav { gap: 0.9rem; font-size: 0.8rem; row-gap: 0.35rem; }
+  body { font-size: 16px; line-height: 1.62; }
+  .marca-texto { font-size: 1.3rem; }
+  .marca-nota { display: none; }
+  .topo-in { padding: 0.7rem 1.25rem; gap: 1rem; }
+  .topo nav { gap: 1.15rem; font-size: 0.82rem; }
   .faixa { padding-inline: 1.25rem; }
-  .cartao, .aviso { padding: 1.1rem 1.15rem; }
-  .placar b { font-size: 1.3rem; }
-  h2 { margin-top: 2rem; }
+  .cartao { padding: 1.2rem 1.25rem; }
+  .cartao-num { padding-left: 1.25rem; padding-top: 3.1rem; }
+  .cartao-num::before { left: 1.25rem; top: 1.2rem; }
+  .aviso { padding: 1.05rem 1.15rem; }
+  /* O mostrador é uma tabela de largura fixa em mono: no celular ela precisa
+     encolher para caber, senão a última coluna — que é justamente o custo por
+     tarefa, o argumento — some fora da tela. */
+  .leitor pre { font-size: 0.615rem; padding: 0.95rem 0.85rem; }
+  .leitor-topo { padding: 0.6rem 0.85rem; }
+  .leitor-pe { padding: 0.65rem 0.9rem 0.75rem; font-size: 0.71rem; }
+  .placar { margin: 2rem 0; }
+  .placar div { padding: 1rem 1.05rem; }
+  .placar b { font-size: 1.35rem; }
+  h2 { margin-top: 2.2rem; }
+  h3 { margin-top: 2.4em; }
+  hr { margin: 2.5rem 0; }
+  footer { margin-top: 4rem; padding: 2.5rem 1.25rem 3rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

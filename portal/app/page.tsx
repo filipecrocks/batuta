@@ -1,4 +1,5 @@
 import { rankingSkills } from "@/lib/db";
+import { Mostrador } from "@/components/Mostrador";
 
 export const revalidate = 3600;
 
@@ -13,23 +14,29 @@ export default async function Home() {
     <>
       <section className="faixa chamada">
         <div className="centro">
-          <p className="olho">camada aberta de medição de agent skills</p>
-          <h1>
-            Todo mundo tem opinião sobre skills.
-            <br />
-            Ninguém tem o número.
-          </h1>
-          <p className="linha-fina">
-            O Batuta mede se uma skill funciona de verdade, a que custo e em qual
-            modelo — e publica tudo, imutável, sem lucro.
-          </p>
-          <div className="botoes">
-            <a className="botao botao-forte" href="/instalar">
-              Instalar em 30 segundos
-            </a>
-            <a className="botao" href="/manifesto">
-              Ler o manifesto
-            </a>
+          <div className="chamada-grade">
+            <div>
+              <p className="olho">medição aberta de agent skills</p>
+              <h1>
+                Todo mundo tem opinião sobre skills.
+                <br />
+                Ninguém tem o número.
+              </h1>
+              <p className="linha-fina">
+                O Batuta mede se uma skill funciona de verdade, a que custo e em qual
+                modelo — e publica tudo, imutável, sem lucro.
+              </p>
+              <div className="botoes">
+                <a className="botao botao-forte" href="/instalar">
+                  Instalar em 30 segundos
+                </a>
+                <a className="botao" href="/manifesto">
+                  Ler o manifesto
+                </a>
+              </div>
+            </div>
+
+            <Mostrador />
           </div>
         </div>
       </section>
@@ -79,8 +86,8 @@ export default async function Home() {
 
           <h3>como funciona, em três peças</h3>
 
-          <div className="cartao">
-            <h4>1. Um binário que não atrapalha</h4>
+          <div className="cartao cartao-num" data-num="1">
+            <h4>Um binário que não atrapalha</h4>
             <p>
               Um hook local roda antes do seu turno, olha as skills que você já tem e
               sugere no máximo três. BM25, sem rede, sem LLM, sem espera — 2,7 milésimos
@@ -89,8 +96,8 @@ export default async function Home() {
             </p>
           </div>
 
-          <div className="cartao">
-            <h4>2. Um funil que vira número</h4>
+          <div className="cartao cartao-num" data-num="2">
+            <h4>Um funil que vira número</h4>
             <p>
               <span className="mono">route</span> (o Batuta propôs) →{" "}
               <span className="mono">activate</span> (a skill disparou mesmo) →{" "}
@@ -101,8 +108,8 @@ export default async function Home() {
             </p>
           </div>
 
-          <div className="cartao">
-            <h4>3. Um juiz que não pode se enganar sozinho</h4>
+          <div className="cartao cartao-num" data-num="3">
+            <h4>Um juiz que não pode se enganar sozinho</h4>
             <p>
               O juiz é <strong>cego</strong> (não sabe se a skill disparou),{" "}
               <strong>não é réu</strong> (modelo nunca julga a própria saída) e é{" "}
