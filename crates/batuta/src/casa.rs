@@ -1,5 +1,5 @@
-//! ~/.batuta — onde o Batuta guarda o que e dele. Sal, indice, eventos, config.
-//! Nada aqui sobe para lugar nenhum sem opt-in explicito, e o prompt nunca sobe.
+//! ~/.batuta — where Batuta keeps what belongs to it. Salt, index, events, config.
+//! Nothing here uploads anywhere without explicit opt-in, and the prompt never uploads.
 
 use crate::sha256::{hex, sha256};
 use std::fs;
@@ -26,11 +26,11 @@ pub fn garantir() -> PathBuf {
     c
 }
 
-// ------------------------------------------------------------------------ sal
+// ------------------------------------------------------------------------ salt
 
-/// Sal local, gerado uma vez, nunca transmitido. E ele que torna o hash do prompt
-/// inutil para qualquer um que nao seja esta maquina: sem o sal, nao da para testar
-/// um palpite de prompt contra o hash publicado.
+/// Local salt, generated once, never transmitted. It's what makes the prompt hash
+/// useless to anyone but this machine: without the salt, there's no way to test
+/// a prompt guess against the published hash.
 pub fn sal() -> String {
     let arq = garantir().join("sal");
     if let Ok(s) = fs::read_to_string(&arq) {
@@ -48,9 +48,9 @@ pub fn sal() -> String {
 }
 
 fn gerar_sal() -> String {
-    // ATENCAO: /dev/urandom NAO TEM FIM. `fs::read` nele le para sempre e come toda
-    // a memoria da maquina — foi exatamente o que aconteceu na primeira versao
-    // disto. Tem que ser leitura de tamanho fixo.
+    // WARNING: /dev/urandom HAS NO END. `fs::read` on it reads forever and eats
+    // all the machine's memory — that's exactly what happened in the first version
+    // of this. It has to be a fixed-size read.
     if let Ok(mut f) = fs::File::open("/dev/urandom") {
         use std::io::Read;
         let mut b = [0u8; 32];
@@ -74,9 +74,9 @@ fn restringir(p: &Path) {
 #[cfg(not(unix))]
 fn restringir(_p: &Path) {}
 
-/// Identificador da instalacao: derivado do sal, entao nao carrega nome de usuario,
-/// nem hostname, nem caminho de pasta. So serve para dizer "estas linhas vieram da
-/// mesma maquina".
+/// Installation identifier: derived from the salt, so it carries no username,
+/// hostname, or folder path. It's only good for saying "these lines came from the
+/// same machine".
 pub fn id_instalacao() -> String {
     let s = sal();
     hex(&sha256(format!("instalacao|{}", s).as_bytes()))[..16].to_string()
@@ -95,9 +95,9 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            // opt-in explicito. Enquanto isto for falso, nada sai da maquina, e o
-            // `batuta report` continua valendo inteiro — o valor local nao e refem
-            // do upload.
+            // explicit opt-in. As long as this is false, nothing leaves the machine,
+            // and `batuta report` still counts in full — the local value isn't
+            // hostage to the upload.
             envio: false,
             holdout_pct: 5,
             portal: "https://batuta.space".to_string(),

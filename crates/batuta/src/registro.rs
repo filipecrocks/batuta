@@ -1,11 +1,11 @@
-//! Eventos e relatorio.
+//! Events and report.
 //!
-//! REGRA DE OURO, e ela vale mais que qualquer feature: o texto do prompt nunca
-//! entra neste arquivo. Entra o hash com sal local, o comprimento e a contagem de
-//! termos. Quem roubar o eventos.jsonl nao le nada de ninguem.
+//! GOLDEN RULE, and it matters more than any feature: the prompt text never
+//! enters this file. What enters is the hash with a local salt, the length, and
+//! the term count. Whoever steals eventos.jsonl reads nothing about anyone.
 //!
-//! Sobe para o portal, e so com opt-in, o RESUMO DIARIO AGREGADO POR SKILL —
-//! nunca o evento cru. 200 turnos por dia viram ~20 linhas.
+//! What goes up to the portal, and only with opt-in, is the DAILY SUMMARY AGGREGATED
+//! BY SKILL — never the raw event. 200 turns a day become ~20 lines.
 
 use crate::casa;
 use crate::data;
@@ -39,7 +39,7 @@ pub fn carregar() -> Vec<Valor> {
         .collect()
 }
 
-// ------------------------------------------------------------------- agregacao
+// ------------------------------------------------------------------- aggregation
 
 #[derive(Default, Debug, Clone)]
 pub struct PorSkill {
@@ -64,9 +64,9 @@ pub struct Agregado {
     pub rotas_com_sugestao: u64,
     pub rotas_holdout: u64,
     pub skills: BTreeMap<String, PorSkill>,
-    /// desfecho dos turnos em que o roteador FALOU
+    /// outcome of the turns in which the router SPOKE
     pub braco_com: (u64, u64),
-    /// desfecho dos turnos de holdout — o roteador se calou de proposito
+    /// outcome of the holdout turns — the router deliberately stayed silent
     pub braco_holdout: (u64, u64),
     pub ms_total: f64,
     pub ms_amostras: u64,
@@ -76,7 +76,7 @@ pub struct Agregado {
 
 pub fn agregar(eventos: &[Valor], dia: Option<&str>) -> Agregado {
     let mut ag = Agregado::default();
-    // turno -> (holdout, falou, skills sugeridas)
+    // turn -> (holdout, spoke, suggested skills)
     let mut turnos: BTreeMap<String, (bool, bool, Vec<String>)> = BTreeMap::new();
 
     for e in eventos {
@@ -195,7 +195,7 @@ pub fn mediana(v: &mut [f64]) -> f64 {
     }
 }
 
-// ------------------------------------------------------------------- relatorio
+// ------------------------------------------------------------------- report
 
 pub fn relatorio_texto(ag: &Agregado) -> String {
     let mut s = String::new();
@@ -316,10 +316,10 @@ pub fn pct(a: u64, b: u64) -> f64 {
     }
 }
 
-// --------------------------------------------------------------- resumo diario
+// --------------------------------------------------------------- daily summary
 
-/// O unico formato que sobe. Sem prompt, sem hash de prompt, sem caminho de arquivo,
-/// sem nome de usuario. Uma linha por skill por dia.
+/// The only format that gets uploaded. No prompt, no prompt hash, no file path,
+/// no username. One line per skill per day.
 pub fn resumo_diario(ag: &Agregado, dia: &str, versao_batuta: &str, modo: &str) -> Valor {
     let mut skills = Vec::new();
     for (nome, p) in &ag.skills {

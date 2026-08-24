@@ -2,12 +2,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Serve `script/instalar.sh` em https://batuta.space/instalar.sh.
+ * Serves `script/instalar.sh` at https://batuta.space/instalar.sh.
  *
- * O arquivo servido é O MESMO que está versionado no repositório — não existe uma
- * cópia "de produção" que alguém possa editar sem passar pelo git. Num projeto que
- * pede para as pessoas rodarem `curl | sh`, essa é a diferença entre confiança e
- * pedido de confiança.
+ * The file served is THE SAME ONE that is versioned in the repository — there is no
+ * "production" copy that someone could edit without going through git. In a project
+ * that asks people to run `curl | sh`, that's the difference between trust and
+ * asking for trust.
  */
 export const runtime = "nodejs";
 export const revalidate = 3600;

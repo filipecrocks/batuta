@@ -1,16 +1,16 @@
 /**
- * Cliente Neon do portal.
+ * Portal's Neon client.
  *
- * REGRA QUE MANDA NESTE ARQUIVO: sem `DATABASE_URL`, nada explode — as consultas
- * devolvem lista vazia. Motivo prático: o portal precisa buildar na Vercel ANTES do
- * banco existir (e continuar buildando quando alguém abre um preview de PR sem
- * acesso ao Neon). Motivo de fundo: as páginas de ranking e receita são estáticas,
- * geradas pelo lote noturno; o banco é conveniência de leitura, não dependência de
- * vida. Página que mostra "ainda não temos número aqui" é a resposta certa do
- * projeto — melhor que 500, e melhor que número inventado (§11, §14.1).
+ * THE RULE THAT GOVERNS THIS FILE: without `DATABASE_URL`, nothing explodes — queries
+ * return an empty list. Practical reason: the portal needs to build on Vercel BEFORE
+ * the database exists (and keep building when someone opens a PR preview without
+ * access to Neon). Deeper reason: the ranking and recipe pages are static, generated
+ * by the nightly batch; the database is a reading convenience, not a life dependency.
+ * A page that shows "we don't have a number here yet" is the project's correct
+ * answer — better than a 500, and better than a made-up number (§11, §14.1).
  *
- * Roda em edge e em node: o @neondatabase/serverless fala por HTTP/fetch, sem
- * socket TCP. Única dependência npm do portal, e é assim que fica.
+ * Runs on edge and on node: @neondatabase/serverless speaks over HTTP/fetch, no
+ * TCP socket. The portal's only npm dependency, and that's how it stays.
  */
 import { neon } from "@neondatabase/serverless";
 
@@ -24,9 +24,9 @@ type Consulta = <T = Linha>(
 let cliente: Consulta | null = null;
 let resolvido = false;
 
-/** Resolve tarde, não na carga do módulo: no build da Vercel a env de runtime
- *  ainda não está lá, e amarrar o módulo à ausência dela é o bug que este arquivo
- *  existe para evitar. */
+/** Resolves late, not at module load: in the Vercel build the runtime env isn't
+ *  there yet, and tying the module to its absence is the bug this file
+ *  exists to avoid. */
 function conexao(): Consulta | null {
   if (resolvido) return cliente;
   resolvido = true;
@@ -40,16 +40,16 @@ function conexao(): Consulta | null {
   return cliente;
 }
 
-/** Verdadeiro quando existe banco para falar. O endpoint de ingestão usa isto para
- *  responder 503 honesto em vez de fingir que gravou. */
+/** True when there's a database to talk to. The ingestion endpoint uses this to
+ *  respond with an honest 503 instead of pretending it saved the data. */
 export function temBanco(): boolean {
   return conexao() !== null;
 }
 
 /**
- * Tagged template parametrizado (`sql\`select ... where dia = ${dia}\``). Os valores
- * viram $1, $2… no driver: não existe caminho de concatenação de string neste
- * portal, e não é para passar a existir.
+ * Parameterized tagged template (`sql\`select ... where dia = ${dia}\``). The values
+ * become $1, $2… in the driver: there is no string-concatenation path in this
+ * portal, and there isn't meant to be one.
  */
 export const sql: Consulta = (<T = Linha>(
   strings: TemplateStringsArray,
@@ -60,8 +60,8 @@ export const sql: Consulta = (<T = Linha>(
   return c<T>(strings, ...valores);
 }) as Consulta;
 
-/** Toda consulta de página passa por aqui: banco fora do ar não derruba o portal,
- *  vira lista vazia e um aviso no log do servidor. */
+/** Every page query goes through here: a database that's down doesn't take the
+ *  portal down with it, it turns into an empty list and a warning in the server log. */
 async function segura<T>(rotulo: string, f: () => Promise<T[]>): Promise<T[]> {
   if (!temBanco()) return [];
   try {
@@ -94,12 +94,12 @@ export type LinhaRanking = {
 };
 
 /**
- * Ranking de skills numa janela de dias.
+ * Skill ranking over a window of days.
  *
- * `minInstalacoes` não é enfeite: linha com uma instalação só é anedota de uma
- * máquina, e publicar anedota como ranking é exatamente o erro que o projeto acusa
- * nos outros (§2). O padrão é 3 — baixo, mas explícito, e a página tem que dizer
- * qual foi o corte.
+ * `minInstalacoes` isn't decoration: a row with a single installation is one
+ * machine's anecdote, and publishing an anecdote as a ranking is exactly the
+ * mistake the project accuses others of (§2). The default is 3 — low, but
+ * explicit, and the page has to state where the cutoff was.
  */
 export function rankingSkills(opcoes?: {
   dias?: number;
@@ -128,8 +128,8 @@ export function rankingSkills(opcoes?: {
       case when sum(turnos_ok) > 0
            then sum(custo_usd) / sum(turnos_ok) end            as custo_por_tarefa,
       avg(turnos_ate_fim_mediana)     as turnos_ate_fim_mediana,
-      -- max e não sum: a mesma instalação aparece em vários dias da janela, e somar
-      -- transformaria 1 usuário fiel em 30 usuários
+      -- max, not sum: the same installation shows up on multiple days of the window,
+      -- and summing would turn 1 loyal user into 30 users
       max(instalacoes)                as instalacoes,
       count(*)::int                   as dias
     from batuta.metricas_skill_dia
@@ -141,7 +141,7 @@ export function rankingSkills(opcoes?: {
   `);
 }
 
-// ==================================================================== receitas
+// ==================================================================== recipes
 
 export type Receita = {
   slug: string;
@@ -153,8 +153,8 @@ export type Receita = {
   publicada_em: string;
 };
 
-/** Só a versão mais alta de cada receita. As antigas continuam no banco e
- *  continuam citáveis por (slug, versao) — receita é documento, não estado. */
+/** Only the highest version of each recipe. Older ones stay in the database and
+ *  remain citable by (slug, versao) — a recipe is a document, not state. */
 export function receitasPublicadas(limite = 100): Promise<Receita[]> {
   return segura("receitasPublicadas", () => sql<Receita>`
     select distinct on (slug)
@@ -166,7 +166,7 @@ export function receitasPublicadas(limite = 100): Promise<Receita[]> {
   `);
 }
 
-// ====================================================================== cadeia
+// ====================================================================== chain
 
 export type RegistroLinha = {
   id: number;
@@ -177,9 +177,9 @@ export type RegistroLinha = {
   criado_em: string;
 };
 
-/** Últimos elos da corrente, do topo para trás. Vem em ordem decrescente porque é
- *  assim que a página mostra; quem for verificar com `verificarCadeia` precisa
- *  inverter (`.reverse()`) — a corrente se lê do começo. */
+/** Last links of the chain, from the top backward. It comes in descending order
+ *  because that's how the page displays it; anyone verifying with `verificarCadeia`
+ *  needs to reverse it (`.reverse()`) — the chain is read from the start. */
 export function ultimosRegistros(limite = 20): Promise<RegistroLinha[]> {
   return segura("ultimosRegistros", () => sql<RegistroLinha>`
     select id, tipo, corpo, hash, hash_anterior, criado_em
@@ -203,14 +203,15 @@ export type TarefaArena = {
 };
 
 /**
- * Fila da arena com contagem de votos.
+ * Arena queue with vote counts.
  *
- * Não seleciona `contato` — nunca. O contato só serve para avisar quem enviou
- * quando a tarefa rodar; ele não tem por que trafegar até o navegador de terceiros,
- * e a forma mais barata de garantir isso é ele não estar na consulta.
+ * Never selects `contato` (contact). The contact only serves to notify whoever
+ * submitted it when the task runs; there's no reason for it to travel to a third
+ * party's browser, and the cheapest way to guarantee that is for it to not be in
+ * the query.
  *
- * A ordem é por voto, e voto ordena A FILA. O resultado do teste não olha para esta
- * coluna (§1.6, §10).
+ * The order is by vote, and vote orders THE QUEUE. The test result doesn't look at
+ * this column (§1.6, §10).
  */
 export function tarefasArena(opcoes?: {
   status?: string;

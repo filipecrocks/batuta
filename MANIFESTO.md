@@ -1,97 +1,103 @@
-# Manifesto do Batuta
+# Batuta Manifesto
 
-## Uma frase
+## One sentence
 
-O Batuta é a **camada aberta de medição de Agent Skills**: mede se uma skill funciona
-de verdade, a que custo, em qual modelo — e publica tudo, imutável, sem lucro.
+Batuta is the **open measurement layer for Agent Skills**: it measures whether a
+skill actually works, at what cost, on which model — and publishes everything,
+immutable, zero-profit.
 
-Não é o 27º roteador do mercado. É **o juiz** — e funciona com qualquer roteador.
+It's not the 27th router on the market. It's **the judge** — and it works with any
+router.
 
-## Por que isto existe
+## Why this exists
 
-Existem hoje dezenas de roteadores de skill. Nenhum deles publica dado. Cada um
-mede o próprio gol com a própria régua, e por isso nenhum consegue provar que é
-melhor que o vizinho — nem que serve para alguma coisa.
+Dozens of skill routers exist today. None of them publish data. Each measures its
+own goal with its own ruler, so none can prove it's better than the next one — or
+that it's good for anything at all.
 
-Enquanto isso, quem realmente resolve problema no mundo — professora, agente de
-saúde, técnico agrícola, servidor público, dono de padaria — quase sempre não tem
-dinheiro para modelo caro e não tem como saber o que funciona.
+Meanwhile, the people who actually solve problems in the world — teachers, health
+workers, agricultural technicians, public servants, bakery owners — almost never
+have the money for an expensive model, and have no way to know what works.
 
-**O Batuta entrega o que falta: a receita provada e o custo real.**
+**Batuta delivers what's missing: the proven recipe and the real cost.**
 
-## A estrela-polar
+## The north star
 
-Infraestrutura pública gratuita para que qualquer pessoa, ONG ou governo use IA
-barata com resultado provado. Educação, saúde, agricultura, gestão pública. Máquina
-de desenvolvimento global paga por doação. Alvo institucional: certificação
-**Digital Public Good**.
+Free public infrastructure so that any person, NGO, or government can use cheap AI
+with a proven result. Education, health, agriculture, public administration. A
+global development engine funded by donation. Institutional target: **Digital
+Public Good** certification.
 
-## A regra de sequência
+## The sequencing rule
 
-> "Se não funcionar nada no ponto um, os outros não têm sentido."
+> "If nothing works at point one, the rest doesn't matter."
 
-1. O Batuta mede skills de código e publica os dados — **provar primeiro**
-2. Receitas baratas rendem igual às caras — **provar com número**
-3. Infraestrutura pública global — **a missão, que 1 e 2 compram o direito de anunciar**
+1. Batuta measures code skills and publishes the data — **prove it first**
+2. Cheap recipes perform as well as expensive ones — **prove it with a number**
+3. Global public infrastructure — **the mission, which 1 and 2 buy the right to announce**
 
-O manifesto anuncia a estrela-polar. O lançamento anuncia só o provado.
+The manifesto announces the north star. The launch announces only what's proven.
 
-## Os sete princípios
+## The seven principles
 
-**1. Zero lucro. Zero. Sempre.**
-Ninguém ganha nada — fundadores nem colaboradores. Crédito visível é o salário.
-Colaborador tem nome no portal e no dataset, nunca dinheiro.
+**1. Zero profit. Zero. Always.**
+Nobody earns anything — not founders, not contributors. Visible credit is the
+salary. A contributor's name goes on the portal and in the dataset, never money.
 
-**2. Transparência total.**
-Toda doação e todo gasto são públicos. Todo resultado publicado é imutável e
-verificável por qualquer pessoa.
+**2. Total transparency.**
+Every donation and every expense is public. Every published result is immutable
+and verifiable by anyone.
 
-**3. Privacidade.**
-O prompt **nunca** sai da sua máquina — só hash com sal local, comprimento e
-identificadores. Enviar dado é opt-in explícito. O relatório local funciona 100%
-offline: o valor que o Batuta te dá não é refém do upload.
+**3. Privacy.**
+The prompt **never** leaves your machine — only a hash with a local salt, length,
+and identifiers. Sending data is explicit opt-in. The local report works 100%
+offline: the value Batuta gives you isn't held hostage by the upload.
 
-**4. Sem conflito de interesse.**
-Não vendemos skill, não vendemos modelo, não vendemos SaaS. O número não tem por que
-mentir. Nenhum concorrente pode dizer isso.
+**4. No conflict of interest.**
+We don't sell skills, we don't sell models, we don't sell SaaS. The number has no
+reason to lie. No competitor can say that.
 
-**5. Viés declarado.**
-Quem instala o Batuta já se importa com skills. A amostra é voluntária e não é
-representativa. O dataset declara isso na cara, sempre.
+**5. Declared bias.**
+Whoever installs Batuta already cares about skills. The sample is voluntary and not
+representative. The dataset states this plainly, always.
 
-**6. Voto não é nota.**
-O voto decide o que se testa. O teste decide o que entra na receita.
+**6. A vote isn't a grade.**
+The vote decides what gets tested. The test decides what enters the recipe.
 
-**7. Escopo cívico, nunca partidário.**
-Sistemas para educação, esporte e comunicação entre povo e governo — independentes.
-A gente faz, cada um usa como quiser. Disputa eleitoral fica fora do escopo.
+**7. Civic scope, never partisan.**
+Systems for education, sport, and communication between people and government —
+independent. We build them, everyone uses them however they like. Electoral
+disputes are out of scope.
 
-## O que garante que o número não é conversa
+## What guarantees the number isn't just talk
 
-**O juiz é cego.** Ele não sabe se a skill disparou. Se soubesse, confirmaria o que a
-gente quer ouvir, e o número morreria ali.
+**The judge is blind.** It doesn't know whether the skill fired. If it knew, it
+would confirm whatever we want to hear, and the number would die right there.
 
-**O juiz não é réu.** Modelo nunca julga a própria saída. Julgamento cruzado, sempre.
+**The judge is not the defendant.** A model never judges its own output. Cross
+judgment, always.
 
-**O juiz é versionado.** Modelo, versão e prompt inteiro ficam gravados junto de cada
-veredito. Juiz que muda sem changelog invalida a série histórica.
+**The judge is versioned.** Model, version, and the full prompt are recorded
+alongside every verdict. A judge that changes without a changelog invalidates the
+historical series.
 
-**Existe grupo de controle.** Em 5% dos turnos o roteador se cala de propósito. Sem
-isso, mede-se correlação e chama-se de causa. O holdout é declarado na cara do
-usuário, é configurável e é desligável — experimento escondido destrói o projeto.
+**A control group exists.** In 5% of turns the router deliberately stays silent.
+Without this, you're measuring correlation and calling it causation. The holdout is
+declared plainly to the user, is configurable, and can be turned off — a hidden
+experiment destroys the project.
 
-**A corrente não se edita.** Cada resultado publicado carrega o hash do anterior.
-Alterar um registro antigo quebra a corrente na frente de todo mundo. O topo é
-carimbado fora do nosso controle, periodicamente, com OpenTimestamps.
+**The chain cannot be edited.** Every published result carries the previous one's
+hash. Altering an old record breaks the chain in front of everyone. The top is
+stamped outside our control, periodically, with OpenTimestamps.
 
-## O que o Batuta admite sobre si mesmo
+## What Batuta admits about itself
 
-Credibilidade é o único produto. Um número alucinado ou um registro editado mata o
-projeto inteiro, e nenhuma boa intenção conserta depois.
+Credibility is the only product. One hallucinated number or one edited record kills
+the whole project, and no good intention fixes that afterward.
 
-Por isso: quando a gente declina ou limita alguma coisa, o motivo se escreve. Quando
-a gente publica, o cru acompanha.
+So: when we decline or limit something, the reason gets written down. When we
+publish, the raw data comes with it.
 
 ---
 
-*Batuta · zero lucro · https://batuta.space · código sob licença MIT*
+*Batuta · zero profit · https://batuta.space · code under MIT license*

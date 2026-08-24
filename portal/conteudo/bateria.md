@@ -1,8 +1,8 @@
-# Bateria canônica v1
+# Canonical battery v1
 
-24 tarefas congeladas em `tarefas.json`. Enunciado, insumos, critério de aceite e
-verificador entram no repositório como código: versionados, imutáveis dentro da
-versão, revisáveis por qualquer pessoa.
+24 tasks frozen in `tarefas.json`. Statement, inputs, acceptance criteria, and
+verifier enter the repository as code: versioned, immutable within the
+version, reviewable by anyone.
 
 - `schema`: `batuta.bateria.v1`
 - `versao`: `1.0.0`
@@ -10,28 +10,28 @@ versão, revisáveis por qualquer pessoa.
 
 ---
 
-## Por que congelar
+## Why freeze it
 
-Sem bateria congelada, nenhum número é comparável — e um número não comparável é
+Without a frozen battery, no number is comparable — and a non-comparable number is
 marketing.
 
-Três coisas quebram quando a tarefa muda no meio:
+Three things break when the task changes mid-stream:
 
-1. **A série histórica morre.** Se o enunciado de hoje não é o de ontem, a
-   diferença medida entre dois modelos pode ser só a diferença entre dois textos.
-2. **O experimento vira torcida.** Quem escreve a tarefa depois de ver a saída
-   escreve a tarefa que a saída vence. É exatamente o vício que a §2 do dossiê
-   documenta no mercado: cada roteador marca o próprio gol com a própria régua.
-3. **O critério de aceite deixa de ser critério.** Critério escrito depois é
-   racionalização.
+1. **The historical series dies.** If today's statement isn't yesterday's, the
+   difference measured between two models might just be the difference between two pieces of text.
+2. **The experiment turns into cheerleading.** Whoever writes the task after seeing the output
+   writes the task the output wins. That's exactly the vice §2 of the dossier
+   documents in the market: every router scores its own goal with its own ruler.
+3. **The acceptance criteria stops being a criterion.** Criteria written afterward is
+   rationalization.
 
-Por isso: **critério de aceite nasce junto da tarefa**, antes de qualquer rodada,
-e cada critério é respondível com sim ou não por alguém que não viu a saída ser
-gerada. Nada de "bem escrito", "de qualidade", "adequado".
+That's why: **acceptance criteria is born together with the task**, before any round,
+and each criterion can be answered yes or no by someone who didn't watch the output
+being generated. None of "well written," "high quality," "adequate."
 
 ---
 
-## O que tem dentro de cada tarefa
+## What's inside each task
 
 ```json
 {
@@ -50,214 +50,213 @@ gerada. Nada de "bem escrito", "de qualidade", "adequado".
 }
 ```
 
-Regras que a bateria v1 obedece e que qualquer versão futura tem de obedecer:
+Rules the v1 battery follows, and that any future version must follow too:
 
-- **6 categorias × 4 tarefas = 24.** Em cada categoria: 1 simples, 2 médias, 1
-  complexa. Categorias: `codigo`, `escrita`, `dados`, `documentos`, `pesquisa`,
+- **6 categories × 4 tasks = 24.** In each category: 1 simple, 2 medium, 1
+  complex. Categories: `codigo`, `escrita`, `dados`, `documentos`, `pesquisa`,
   `automacao`.
-- **As 4 tarefas de `codigo` são `automatica`**, com verificador real (teste que
-  passa ou não passa). É o que torna a Fase 1 quase grátis.
-- **O enunciado nunca cita skill.** Nada de "use a skill X". O braço com skill se
-  distingue pelo ambiente, nunca pelo texto. Enunciado idêntico, palavra por
-  palavra, nos dois braços.
-- **Enunciado curto**: 2 a 8 linhas. Tarefa complexa ganha mais insumo, não mais
-  prosa.
-- **Zero rede, zero conta em serviço externo, zero data corrente.** Onde a data
-  importa (`aut-03`), ela entra por variável de ambiente (`DATA_REF`), não por
-  `date` do sistema.
-- **`skills_candidatas` é hipótese declarada**, não instrução: é o que a tarefa
-  *deveria* acionar. Quando o roteador não aciona nenhuma delas e o resultado sobe
-  assim mesmo, isso também é dado.
+- **The 4 `codigo` tasks are `automatica`**, with a real verifier (a test that
+  passes or doesn't). That's what makes Phase 1 nearly free.
+- **The statement never names a skill.** No "use skill X." The arm with the skill is
+  distinguished by the environment, never by the text. Identical statement, word for
+  word, in both arms.
+- **Short statement**: 2 to 8 lines. A complex task gets more input, not more
+  prose.
+- **Zero network, zero account on an external service, zero current date.** Where the date
+  matters (`aut-03`), it comes in via an environment variable (`DATA_REF`), not the
+  system's `date`.
+- **`skills_candidatas` is a declared hypothesis**, not an instruction: it's what the task
+  *should* trigger. When the router doesn't trigger any of them and the result still goes up
+  anyway, that's data too.
 
-### Distribuição da v1
+### v1 distribution
 
-| categoria | simples | médias | complexa | verificação |
+| category | simple | medium | complex | verification |
 |---|---|---|---|---|
-| `codigo` | cod-01 | cod-02, cod-03 | cod-04 | 4 automáticas |
-| `escrita` | esc-01 | esc-02, esc-03 | esc-04 | 3 mistas, 1 juiz |
-| `dados` | dad-01 | dad-02, dad-03 | dad-04 | 4 mistas |
-| `documentos` | doc-01 | doc-02, doc-03 | doc-04 | 4 mistas |
-| `pesquisa` | pes-01 | pes-02, pes-03 | pes-04 | 2 mistas, 2 juiz |
-| `automacao` | aut-01 | aut-02, aut-03 | aut-04 | 4 mistas |
+| `codigo` | cod-01 | cod-02, cod-03 | cod-04 | 4 automatic |
+| `escrita` | esc-01 | esc-02, esc-03 | esc-04 | 3 mixed, 1 judge |
+| `dados` | dad-01 | dad-02, dad-03 | dad-04 | 4 mixed |
+| `documentos` | doc-01 | doc-02, doc-03 | doc-04 | 4 mixed |
+| `pesquisa` | pes-01 | pes-02, pes-03 | pes-04 | 2 mixed, 2 judge |
+| `automacao` | aut-01 | aut-02, aut-03 | aut-04 | 4 mixed |
 
-Total: 4 automáticas, 17 mistas, 3 só juiz.
-
----
-
-## Como rodar
-
-**Pré-requisitos do ambiente da rodada:** `bash`, `python3` (3.11+, só biblioteca
-padrão), `make`, `tar`, `unzip`. Nada mais. Sem rede.
-
-Cada rodada é um diretório vazio, próprio, descartável. O ciclo é sempre o mesmo:
-
-1. **Preparar o diretório.** Rodar, em ordem, cada `gerador` dos `insumos` da
-   tarefa, com o diretório da rodada como diretório corrente. O gerador é
-   determinístico: mesmo comando, mesmo byte.
-2. **Entregar o enunciado.** Enviar `enunciado` ao modelo, sem uma palavra a
-   mais. O ambiente do braço (com skill / sem skill / com receita) é a única
-   diferença entre as rodadas da mesma tarefa.
-3. **Deixar trabalhar** até o `teto_turnos`. Estourou o teto sem entregar: a
-   rodada é registrada como reprovada por teto, não descartada.
-4. **Verificar.** Rodar o `verificador` com `bash -e`, com o diretório da rodada
-   como diretório corrente e os insumos já presentes. Saída `0` = aprovado.
-5. **Julgar**, quando `verificacao` for `juiz` ou `mista`, seguindo
-   `docs/PROTOCOLO.md` — cego, cruzado, versionado.
-6. **Registrar o cru**: enunciado, insumos, saída, código de saída do verificador,
-   veredito do juiz, tokens, custo, turnos.
-
-O verificador cobre o que é contável. O juiz cobre o resto do `criterio_aceite`.
-Em tarefa `mista`, **verificador reprovado encerra a rodada**: não se pede ao juiz
-que salve saída que já falhou no objetivo.
-
-### Fase 1: só a fatia `codigo`
-
-A Fase 1 roda **apenas as 4 tarefas de `codigo`**, e só depois abre para o resto.
-O motivo é o do dossiê (§12): o juiz de código é quase grátis, porque teste passa
-ou não passa. Validar o método no terreno objetivo antes de gastar julgamento em
-terreno subjetivo é o que separa medição de opinião.
-
-Ordem de abertura das fatias, depois da 1: `dados` e `automacao` (verificador
-forte), depois `documentos`, depois `escrita` e `pesquisa`.
+Total: 4 automatic, 17 mixed, 3 judge-only.
 
 ---
 
-## Braço
+## How to run it
 
-Braço é **o que muda no ambiente**, com o enunciado parado. A v1 prevê três:
+**Run-environment prerequisites:** `bash`, `python3` (3.11+, standard library
+only), `make`, `tar`, `unzip`. Nothing else. No network.
 
-| braço | o que está ligado |
+Each run is its own empty, disposable directory. The cycle is always the same:
+
+1. **Prepare the directory.** Run, in order, each `gerador` of the task's
+   `insumos`, with the run's directory as the current directory. The generator is
+   deterministic: same command, same byte.
+2. **Deliver the statement.** Send `enunciado` to the model, not one word
+   more. The arm's environment (with skill / without skill / with recipe) is the only
+   difference between runs of the same task.
+3. **Let it work** up to `teto_turnos`. If it exceeds the cap without delivering, the
+   run is recorded as failed by cap, not discarded.
+4. **Verify.** Run the `verificador` with `bash -e`, with the run's directory
+   as the current directory and the inputs already in place. Exit code `0` = passed.
+5. **Judge**, when `verificacao` is `juiz` or `mista`, following
+   `docs/PROTOCOLO.md` — blind, cross, versioned.
+6. **Record the raw data**: statement, inputs, output, verifier exit code,
+   judge's verdict, tokens, cost, turns.
+
+The verifier covers what's countable. The judge covers the rest of the `criterio_aceite`.
+On a `mista` task, **a failed verifier ends the run**: the judge isn't asked
+to salvage output that already failed the objective.
+
+### Phase 1: only the `codigo` slice
+
+Phase 1 runs **only the 4 `codigo` tasks**, and only afterward opens up to the rest.
+The reason is the dossier's (§12): the code judge is nearly free, because a test passes
+or it doesn't. Validating the method on objective ground before spending judgment on
+subjective ground is what separates measurement from opinion.
+
+Order in which slices open, after the 1st: `dados` and `automacao` (strong
+verifier), then `documentos`, then `escrita` and `pesquisa`.
+
+---
+
+## Arm
+
+Arm is **what changes in the environment**, with the statement held fixed. v1 defines three:
+
+| arm | what's turned on |
 |---|---|
-| `sem-nada` | modelo puro, nenhuma skill instalada, roteador calado |
-| `com-skill` | apenas as `skills_candidatas` da tarefa instaladas e roteáveis |
-| `com-receita` | a receita inteira instalada (6-10 skills fixadas em versão, §5) |
+| `sem-nada` | plain model, no skill installed, router silent |
+| `com-skill` | only the task's `skills_candidatas` installed and routable |
+| `com-receita` | the whole recipe installed (6-10 skills pinned to a version, §5) |
 
-A matriz principal roda **2 braços** — `sem-nada` e `com-skill`. `com-receita`
-entra quando existir receita publicada com evidência colada.
+The main matrix runs **2 arms** — `sem-nada` and `com-skill`. `com-receita`
+comes in once a published recipe exists with evidence attached.
 
-Registrar, em toda rodada: qual braço, quais skills estavam instaladas, qual
-disparou de fato (`activate`), e a versão de cada uma. Skill instalada que não
-disparou é skill fantasma, e isso é um resultado — não um erro de execução.
-
----
-
-## A regra "canal não multiplica" (§7, regra 2)
-
-A matriz principal roda **num canal só**: OpenRouter, API unificada. Não se
-multiplica a matriz por canal.
-
-O motivo é aritmético e de higiene. Aritmético: 24 tarefas × 2 braços × 6 modelos
-já são ~300 rodadas/mês; multiplicar por 4 canais leva a 1.200 e nada fica
-comparável com nada. De higiene: o canal muda temperatura padrão, janela de
-contexto efetiva, versão servida e limite de saída, e nenhuma dessas coisas é o
-que a bateria quer medir.
-
-Canal vira **teste separado e declarado**: mesma tarefa, mesmo modelo, mesmo
-braço, canais diferentes (assinatura, API direta, OpenRouter, OpenCode…). Se
-aparecer diferença, ela é notícia por si — e é publicada como tal, não misturada
-ao número principal.
-
-Toda linha publicada carrega o canal. Um número sem canal declarado não entra no
-dataset.
+Record, on every run: which arm, which skills were installed, which one actually
+fired (`activate`), and each one's version. An installed skill that didn't
+fire is a ghost skill, and that's a result — not an execution error.
 
 ---
 
-## A conta
+## The "channel doesn't multiply" rule (§7, rule 2)
+
+The main matrix runs **on a single channel**: OpenRouter, the unified API. The matrix is not
+multiplied by channel.
+
+The reason is arithmetic and hygiene. Arithmetic: 24 tasks × 2 arms × 6 models
+is already ~300 runs/month; multiplying by 4 channels gets to 1,200 and nothing stays
+comparable to anything. Hygiene: the channel changes default temperature, effective
+context window, version served, and output limit, and none of those is what
+the battery wants to measure.
+
+Channel becomes a **separate, declared test**: same task, same model, same
+arm, different channels (subscription, direct API, OpenRouter, OpenCode…). If a
+difference shows up, it's news in its own right — and it's published as such, not mixed
+into the main number.
+
+Every published row carries the channel. A number without a declared channel doesn't go into
+the dataset.
+
+---
+
+## The math
 
 ```
-24 tarefas × 2 braços × 6 modelos ≈ 288 rodadas/mês
+24 tasks × 2 arms × 6 models ≈ 288 runs/month
 ```
 
-Arredondando com as repetições de desempate: **≈ 300 rodadas/mês**, algumas dezenas
-de dólares via API.
+Rounding with tie-break repetitions: **≈ 300 runs/month**, some tens
+of dollars via API.
 
-Modelos da v1, por faixa (o nome exato de cada um vive no manifesto da rodada, não
-aqui — modelo troca, faixa não): 2 de topo pago, 2 de faixa média, 1 pequeno,
-1 grátis/local.
+v1 models, by tier (each one's exact name lives in the run manifest, not
+here — the model changes, the tier doesn't): 2 top-tier paid, 2 mid-tier,
+1 small, 1 free/local.
 
-Fase 1, só `codigo`: `4 × 2 × 6 = 48 rodadas`, e 48 verificações automáticas — sem
-custo de juiz.
-
----
-
-## Rotação mensal
-
-Todo mês: **entram 5 tarefas, saem 5, com changelog.** Casa com o ciclo de 5 skills
-novas por mês.
-
-Regras da rotação:
-
-1. **A versão sobe.** `1.0.0` → `1.1.0` a cada rotação. Correção de erro material
-   num enunciado ou verificador sobe o patch (`1.0.1`) e é anunciada como
-   correção, nunca aplicada em silêncio.
-2. **A forma se mantém.** Depois da rotação continua sendo 6 categorias × 4
-   tarefas, 1 simples / 2 médias / 1 complexa em cada. Sai uma média, entra uma
-   média.
-3. **Quem sai, sai por motivo escrito.** Motivos válidos: saturou (todos os braços
-   passam ou todos falham, não discrimina mais), vazou (o enunciado apareceu em
-   corpus público), quebrou (o verificador depende de algo que mudou no ambiente),
-   ou virou ambígua na prática.
-4. **Tarefa aposentada não é apagada.** Ela sai da bateria ativa e fica no
-   `CHANGELOG.md` com a versão em que entrou e a versão em que saiu. Os resultados
-   antigos continuam válidos para a faixa de versões em que ela estava ativa.
-5. **Nunca se rotaciona no meio de uma série.** Rotação acontece na virada da
-   versão, com todas as rodadas da versão anterior fechadas.
-
-Cada entrada de `CHANGELOG.md` traz: versão, data, tarefas que entraram (com id,
-categoria, complexidade e origem), tarefas que saíram (com motivo), e o hash do
-`tarefas.json` da versão anterior — a mesma cadeia de hash do §8 do dossiê.
+Phase 1, `codigo` only: `4 × 2 × 6 = 48 runs`, and 48 automatic verifications — no
+judge cost.
 
 ---
 
-## Como uma tarefa nova entra
+## Monthly rotation
 
-Vinda da arena (§10), sempre pelo mesmo funil:
+Every month: **5 tasks come in, 5 go out, with a changelog.** Matches the cycle of 5
+new skills per month.
+
+Rotation rules:
+
+1. **The version bumps.** `1.0.0` → `1.1.0` at every rotation. A material error fix
+   in a statement or verifier bumps the patch (`1.0.1`) and is announced as a
+   correction, never applied silently.
+2. **The shape stays the same.** After rotation it's still 6 categories × 4
+   tasks, 1 simple / 2 medium / 1 complex in each. A medium one leaves, a
+   medium one comes in.
+3. **Whoever leaves, leaves for a written reason.** Valid reasons: saturated (every arm
+   passes or every arm fails, it no longer discriminates), leaked (the statement showed up in a
+   public corpus), broke (the verifier depends on something that changed in the environment),
+   or turned out ambiguous in practice.
+4. **A retired task isn't deleted.** It leaves the active battery and stays in
+   `CHANGELOG.md` with the version it entered in and the version it left in. The old
+   results remain valid for the range of versions it was active in.
+5. **Never rotate mid-series.** Rotation happens at a version turnover, with
+   all runs of the previous version closed out.
+
+Every `CHANGELOG.md` entry carries: version, date, tasks that came in (with id,
+category, complexity, and origin), tasks that left (with reason), and the hash of the
+previous version's `tarefas.json` — the same hash chain from §8 of the dossier.
+
+---
+
+## How a new task gets in
+
+Coming from the arena (§10), always through the same funnel:
 
 ```
-Envio → Triagem → Canonização → Voto → Teste → Publicação
+Submission → Triage → Canonization → Vote → Trial → Publication
 ```
 
-- **Triagem.** Dedupe, segurança, nada de executável escondido, nada que precise
-  de rede ou de conta. Sai daqui só o que é reproduzível numa máquina desligada da
-  internet.
-- **Canonização — a porta que importa.** *Tarefa enviada NUNCA roda como chegou.*
-  É reescrita no formato desta bateria: enunciado autocontido de 2 a 8 linhas,
-  insumos com gerador determinístico, critério de aceite verificável, categoria,
-  complexidade, verificador quando der. Quem envia sugere o problema; **a régua é
-  nossa** — autor de skill manda a tarefa que a skill dele vence.
-- **Voto.** Decide a fila de teste, nunca o resultado. Voto ≠ nota.
-- **Ensaio antes de entrar.** Toda tarefa candidata roda uma vez em cada braço,
-  fora da bateria, contra pelo menos 2 modelos de faixas diferentes. Se todos
-  passam ou todos falham, ela não discrimina e volta para a fila de reescrita.
-- **Verificador antes do congelamento.** Nenhuma tarefa entra sem que o
-  verificador tenha sido testado nos dois sentidos: aprovar uma solução de
-  referência correta **e** reprovar uma solução ausente ou errada. Verificador que
-  só foi testado no caso feliz não é verificador.
-- **Entrada.** Só na próxima virada de versão, no lugar de uma tarefa que saiu, com
-  crédito nominal a quem enviou no `CHANGELOG.md` e no dataset.
+- **Triage.** Dedupe, security, no hidden executables, nothing that needs
+  network or an account access. Only what's reproducible on a machine disconnected from the
+  internet comes out of here.
+- **Canonization — the gate that matters.** *A submitted task NEVER runs as it arrived.*
+  It's rewritten into this battery's format: a self-contained 2-to-8-line statement,
+  inputs with a deterministic generator, a verifiable acceptance criterion, category,
+  complexity, a verifier when possible. Whoever submits suggests the problem; **the ruler is
+  ours** — a skill author doesn't get to submit the task their skill wins.
+- **Vote.** Decides the test queue, never the result. Vote ≠ score.
+- **Trial run before entry.** Every candidate task runs once in each arm,
+  outside the battery, against at least 2 models from different tiers. If everyone
+  passes or everyone fails, it doesn't discriminate and goes back to the rewrite queue.
+- **Verifier before freezing.** No task enters without the verifier having been
+  tested both ways: passing a correct reference solution **and** failing a missing or
+  wrong one. A verifier that's only been tested on the happy path isn't a verifier.
+- **Entry.** Only at the next version turnover, in the place of a task that left, with
+  named credit to whoever submitted it in `CHANGELOG.md` and in the dataset.
 
 ---
 
-## O que nunca pode acontecer nesta pasta
+## What can never happen in this folder
 
-- Editar `enunciado`, `insumos`, `criterio_aceite` ou `verificador` de `1.0.0`
-  depois da primeira rodada publicada. Mudou, é outra versão.
-- Enunciado que cite skill, roteador, marca de modelo ou o próprio Batuta.
-- Critério de aceite que precise de opinião para ser respondido.
-- Tarefa que dependa de rede, de credencial ou da data de hoje.
-- Verificador que leia o nome do braço, do modelo ou qualquer rótulo. O
-  verificador vê arquivos, e só.
-- Resultado publicado sem canal, sem versão da bateria e sem versão do juiz.
+- Editing `enunciado`, `insumos`, `criterio_aceite`, or `verificador` of `1.0.0`
+  after the first published run. If it changed, it's another version.
+- A statement that names a skill, router, model brand, or Batuta itself.
+- Acceptance criteria that needs an opinion to be answered.
+- A task that depends on the network, a credential, or today's date.
+- A verifier that reads the arm's name, the model's, or any label. The
+  verifier sees files, and only files.
+- A published result without channel, without battery version, and without judge version.
 
 ---
 
-## Arquivos
+## Files
 
 ```
 bateria/v1/
-├── tarefas.json    # as 24 tarefas congeladas
-└── README.md       # este arquivo
+├── tarefas.json    # the 24 frozen tasks
+└── README.md       # this file
 ```
 
-O protocolo de execução, o julgamento cego e o holdout causal estão em
+The execution protocol, blind judging, and the causal holdout are in
 `docs/PROTOCOLO.md`.

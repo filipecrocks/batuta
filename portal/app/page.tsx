@@ -4,9 +4,9 @@ import { Mostrador } from "@/components/Mostrador";
 export const revalidate = 3600;
 
 export default async function Home() {
-  // Estatico-primeiro: a pagina e gerada e revalidada de hora em hora. Sem banco no
-  // caminho de quem le. Se o banco nao existir ainda, `rankingSkills` devolve lista
-  // vazia e a pagina diz a verdade em vez de inventar numero.
+  // Static-first: the page is generated and revalidated hourly. No database in the
+  // reader's path. If the database doesn't exist yet, `rankingSkills` returns an
+  // empty list and the page tells the truth instead of making up a number.
   const ranking = await rankingSkills({ dias: 30, limite: 5 });
   const skillsMedidas = ranking.length;
 

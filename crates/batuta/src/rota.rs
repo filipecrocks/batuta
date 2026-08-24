@@ -1,7 +1,7 @@
-//! Caminho quente. Orcamento: 100ms, teto duro de 300ms. Zero rede, zero LLM,
-//! zero espera. Se algo aqui puder falhar, falha calado e devolve 0 — hook que
-//! estoura o tempo tem a saida inteira descartada, e roteador que trava o turno
-//! do usuario e pior que roteador que nao existe.
+//! Hot path. Budget: 100ms, hard ceiling of 300ms. Zero network, zero LLM,
+//! zero waiting. If something here can fail, it fails silently and returns 0 — a hook
+//! that blows the time budget has its whole output discarded, and a router that stalls
+//! the user's turn is worse than a router that doesn't exist.
 
 use crate::bm25;
 use crate::casa;
@@ -17,9 +17,9 @@ pub struct Saida {
     pub evento: Valor,
 }
 
-/// Sorteio do holdout: deterministico a partir do sal local e do proprio prompt.
-/// Deterministico de proposito — a mesma pergunta cai sempre no mesmo braco, entao
-/// nao da para "tentar de novo ate o roteador falar".
+/// Holdout draw: deterministic from the local salt and the prompt itself.
+/// Deliberately deterministic — the same question always lands in the same arm, so
+/// there's no way to "try again until the router speaks".
 fn e_holdout(sal: &str, prompt: &str, pct: u32) -> bool {
     if pct == 0 {
         return false;
@@ -82,10 +82,10 @@ pub fn rotear(prompt: &str, modo: &str, turno_dado: Option<String>, versao: &str
         ("sugestoes", Valor::Lista(sugestoes.clone())),
     ]);
 
-    // O bloco injetado custa token em TODO turno. Entao ele e curto de proposito, e
-    // a declaracao completa (privacidade, opt-in, holdout) aparece UMA vez, na
-    // primeira execucao, dentro do contexto — onde o usuario ve — e depois vive em
-    // `batuta privacidade` e `batuta report`.
+    // The injected block costs tokens on EVERY turn. So it's deliberately short, and
+    // the full statement (privacy, opt-in, holdout) appears ONCE, on the first
+    // run, inside the context — where the user sees it — and afterward lives in
+    // `batuta privacidade` and `batuta report`.
     let texto_saida = if linhas.is_empty() {
         None
     } else {

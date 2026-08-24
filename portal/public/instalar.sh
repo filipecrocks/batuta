@@ -1,13 +1,13 @@
 #!/bin/sh
-# Instalador do Batuta.
+# Batuta installer.
 #
 #   curl -fsSL https://batuta.space/instalar.sh | sh
 #
-# Fixar uma versao:   BATUTA_VERSAO=v0.1.0 curl -fsSL https://batuta.space/instalar.sh | sh
-# Escolher a pasta:   BATUTA_DESTINO=/opt/bin curl -fsSL https://batuta.space/instalar.sh | sh
+# Pin a version:      BATUTA_VERSAO=v0.1.0 curl -fsSL https://batuta.space/instalar.sh | sh
+# Choose the folder:   BATUTA_DESTINO=/opt/bin curl -fsSL https://batuta.space/instalar.sh | sh
 #
-# POSIX sh puro, sem bashismo. Confere o SHA256 contra o SHA256SUMS da release:
-# se nao bater, nao instala. Nada de meia instalacao — ou entra inteiro, ou nao entra.
+# Pure POSIX sh, no bashisms. Checks the SHA256 against the release's SHA256SUMS:
+# if it doesn't match, it doesn't install. No half installation — it goes in whole, or not at all.
 
 set -eu
 
@@ -35,7 +35,7 @@ tem() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# ------------------------------------------------------------------ ferramentas
+# ------------------------------------------------------------------ tools
 
 if tem curl; then
     BAIXADOR=curl
@@ -46,7 +46,7 @@ else
 fi
 
 baixar() {
-    # baixar <url> <destino>
+    # baixar <url> <destino> (download <url> <destination>)
     if [ "$BAIXADOR" = curl ]; then
         curl -fsSL --proto '=https' --tlsv1.2 -o "$2" "$1" || return 1
     else
@@ -65,7 +65,7 @@ else
 fi
 
 somar() {
-    # somar <arquivo> -> imprime so o hash em minusculo
+    # somar <arquivo> -> prints only the hash in lowercase (checksum <file>)
     if [ "$SOMA" = "openssl-dgst" ]; then
         openssl dgst -sha256 "$1" | sed 's/^.*= *//'
     else
@@ -73,7 +73,7 @@ somar() {
     fi
 }
 
-# ------------------------------------------------------------- so e arquitetura
+# ------------------------------------------------------------- os and architecture
 
 SISTEMA="$(uname -s)"
 MAQUINA="$(uname -m)"
@@ -100,7 +100,7 @@ esac
 ALVO="$ARQ-$SO"
 PACOTE="batuta-$ALVO.tar.gz"
 
-# ------------------------------------------------------------------- que versao
+# ------------------------------------------------------------------- which version
 
 VERSAO="${BATUTA_VERSAO:-}"
 if [ -z "$VERSAO" ]; then
@@ -121,7 +121,7 @@ fi
 
 printf '  batuta %s · %s\n' "$VERSAO" "$ALVO"
 
-# --------------------------------------------------------- baixar e CONFERIR
+# --------------------------------------------------------- download and CHECK
 
 URL_PACOTE="$BASE_DL/$VERSAO/$PACOTE"
 URL_SOMAS="$BASE_DL/$VERSAO/SHA256SUMS"
@@ -151,7 +151,7 @@ fi
 
 printf '  sha256 confere: %s\n' "$OBTIDO"
 
-# ------------------------------------------------------------------- desempacotar
+# ------------------------------------------------------------------- unpack
 
 tem tar || morrer "preciso do tar para desempacotar."
 ( cd "$TMPDIR_BATUTA" && tar -xzf "$PACOTE" ) ||
@@ -160,7 +160,7 @@ tem tar || morrer "preciso do tar para desempacotar."
     morrer "o pacote abriu mas nao tinha o binario 'batuta' dentro."
 chmod 755 "$TMPDIR_BATUTA/batuta"
 
-# ------------------------------------------------------------------- onde instalar
+# ------------------------------------------------------------------- where to install
 
 if [ -n "${BATUTA_DESTINO:-}" ]; then
     DESTINO="$BATUTA_DESTINO"
@@ -174,13 +174,13 @@ mkdir -p "$DESTINO" || morrer "nao consegui criar $DESTINO."
 [ -w "$DESTINO" ] || morrer "$DESTINO existe mas nao tenho permissao de escrever.
        Escolha outra:  BATUTA_DESTINO=\$HOME/.local/bin sh instalar.sh"
 
-# mv dentro da mesma arvore quando der; se for cross-device, cai no cp.
+# mv within the same tree when possible; falls back to cp if cross-device.
 mv "$TMPDIR_BATUTA/batuta" "$DESTINO/batuta" 2>/dev/null ||
     cp "$TMPDIR_BATUTA/batuta" "$DESTINO/batuta" ||
     morrer "nao consegui gravar $DESTINO/batuta."
 chmod 755 "$DESTINO/batuta"
 
-# --------------------------------------------------------------------- conferir
+# --------------------------------------------------------------------- verify
 
 "$DESTINO/batuta" version >/dev/null 2>&1 ||
     morrer "instalei em $DESTINO/batuta mas ele nao roda aqui.
@@ -199,7 +199,7 @@ case ":$PATH:" in
         ;;
 esac
 
-# ------------------------------------------------------------- os 3 proximos passos
+# ------------------------------------------------------------- the next 3 steps
 
 printf '
   Proximos 3 passos, nesta ordem:

@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 
-/** O formulário fala com /api/arena. Ele não promete que a tarefa vai rodar como
- *  chegou — porque não vai: toda tarefa enviada é reescrita em formato canônico antes
- *  de entrar na fila. Quem envia sugere o problema; a régua é do Batuta. */
+/** The form talks to /api/arena. It doesn't promise the task will run as
+ *  submitted — because it won't: every submitted task is rewritten into canonical
+ *  format before entering the queue. Whoever submits suggests the problem; the
+ *  ruler belongs to Batuta. */
 export function FormularioArena() {
   const [estado, setEstado] = useState<"parado" | "enviando" | "ok" | "erro">("parado");
   const [recado, setRecado] = useState("");

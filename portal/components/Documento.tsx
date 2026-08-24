@@ -1,8 +1,8 @@
 import { markdown } from "@/lib/markdown";
 
-/** Renderiza um markdown do repositório. O HTML vem do nosso próprio renderizador
- *  (lib/markdown.ts), que não aceita HTML embutido — a fonte é o repo, não entrada
- *  de usuário, e mesmo assim a porta fica fechada. */
+/** Renders markdown from the repository. The HTML comes from our own renderer
+ *  (lib/markdown.ts), which does not accept embedded HTML — the source is the repo,
+ *  not user input, and even so the door stays closed. */
 export function Documento({ fonte }: { fonte: string }) {
   return (
     <div

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 "use strict";
 
-// Baixa o binario do Batuta da release que corresponde a "version" do package.json,
-// CONFERE o SHA256 contra o SHA256SUMS da mesma release e grava em npm/vendor/.
+// Downloads the Batuta binary from the release matching "version" in package.json,
+// CHECKS the SHA256 against the SHA256SUMS of that same release, and writes it to npm/vendor/.
 //
-// Zero dependencia npm, por lei do projeto: https, zlib, crypto e fs sao do Node.
-// O tar.gz e o zip sao abertos aqui mesmo (30 linhas de cada) para nao depender de
-// `tar` do sistema nem de pacote de terceiro.
+// Zero npm dependencies, by project law: https, zlib, crypto and fs are Node's own.
+// The tar.gz and the zip are opened right here (30 lines each) to avoid depending
+// on the system's `tar` or on a third-party package.
 //
-// Se qualquer passo falhar, este script sai com codigo 1 e diz o que fazer.
-// Meia instalacao nao existe.
+// If any step fails, this script exits with code 1 and says what to do.
+// There is no such thing as a half installation.
 
 const fs = require("fs");
 const path = require("path");
@@ -62,14 +62,14 @@ function baixar(url, saltos) {
   });
 }
 
-// ------------------------------------------------------------------ tar.gz e zip
+// ------------------------------------------------------------------ tar.gz and zip
 
-// Le um tar (ustar) ja descomprimido e devolve o conteudo da entrada pedida.
+// Reads an already-decompressed tar (ustar) and returns the content of the requested entry.
 function doTar(buf, alvo) {
   let off = 0;
   while (off + 512 <= buf.length) {
     const cab = buf.slice(off, off + 512);
-    if (cab[0] === 0) break; // bloco de fim
+    if (cab[0] === 0) break; // end block
     const nome = cab.slice(0, 100).toString("utf8").replace(/\0.*$/, "");
     const prefixo = cab.slice(345, 500).toString("utf8").replace(/\0.*$/, "");
     const inteiro = prefixo ? prefixo + "/" + nome : nome;
@@ -88,7 +88,7 @@ function doTarGz(buf, alvo) {
   return doTar(zlib.gunzipSync(buf), alvo);
 }
 
-// Le um zip pelo diretorio central e devolve o conteudo da entrada pedida.
+// Reads a zip via its central directory and returns the content of the requested entry.
 function doZip(buf, alvo) {
   let fim = -1;
   for (let i = buf.length - 22; i >= 0 && i > buf.length - 66000; i--) {
@@ -121,7 +121,7 @@ function doZip(buf, alvo) {
   return null;
 }
 
-// -------------------------------------------------------------------- instalacao
+// -------------------------------------------------------------------- installation
 
 async function principal() {
   const chave = process.platform + "-" + process.arch;

@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 "use strict";
 
-// `batuta registro atualizar`
+// `batuta registro atualizar` (registry update)
 //
-// POR QUE ISTO EXISTE, E POR QUE MORA AQUI E NAO NO BINARIO:
-// o binario Rust do Batuta NAO ACESSA A REDE. Nunca. E lei do projeto — o caminho
-// quente roteia e registra local, em milissegundos, e o prompt nunca sai da maquina.
-// Um binario que abre socket e um binario que voce precisa auditar toda semana.
-// Entao quem faz rede e o wrapper: este arquivo baixa o registro publico de skills
-// de https://batuta.space/registro.json e grava em ~/.batuta/registro.json, que e
-// so mais um arquivo local que o binario le como qualquer outro.
+// WHY THIS EXISTS, AND WHY IT LIVES HERE AND NOT IN THE BINARY:
+// Batuta's Rust binary DOES NOT ACCESS THE NETWORK. Ever. It's project law — the
+// hot path routes and logs locally, in milliseconds, and the prompt never leaves
+// the machine. A binary that opens a socket is a binary you need to audit every
+// week. So whoever handles the network is the wrapper: this file downloads the
+// public skill registry from https://batuta.space/registro.json and writes it to
+// ~/.batuta/registro.json, which is just another local file the binary reads like
+// any other.
 //
-// Zero dependencia npm: https e fs, do proprio Node.
+// Zero npm dependencies: https and fs, from Node itself.
 
 const fs = require("fs");
 const os = require("os");
@@ -70,7 +71,7 @@ async function atualizar() {
     return 1;
   }
 
-  // Nao grava lixo por cima do que ja funciona.
+  // Don't overwrite what already works with garbage.
   try {
     JSON.parse(corpo.toString("utf8"));
   } catch (e) {

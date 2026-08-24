@@ -9,3 +9,4 @@ node_modules/
 *.zip
 npm/vendor/
 .DS_Store
+*.tsbuildinfo

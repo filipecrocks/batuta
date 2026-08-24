@@ -1,6 +1,6 @@
-//! SHA-256 em std puro. Existe aqui por um motivo so: o binario do caminho quente
-//! nao tem dependencia. Usado para (a) o hash do prompt com sal local — o texto
-//! nunca sai da maquina — e (b) o sorteio deterministico do holdout causal.
+//! SHA-256 in pure std. It exists here for one reason only: the hot-path binary
+//! has no dependency. Used for (a) hashing the prompt with a local salt — the text
+//! never leaves the machine — and (b) the deterministic draw for the causal holdout.
 
 const K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -98,7 +98,7 @@ pub fn hex(bytes: &[u8]) -> String {
     s
 }
 
-/// Hash do prompt: sal local + texto. So o hexadecimal sai daqui; o texto, nunca.
+/// Prompt hash: local salt + text. Only the hexadecimal comes out of here; the text, never.
 pub fn hash_com_sal(sal: &str, texto: &str) -> String {
     let mut buf = Vec::with_capacity(sal.len() + texto.len() + 1);
     buf.extend_from_slice(sal.as_bytes());

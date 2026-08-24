@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://batuta.space/schema/resumo-diario.schema.json",
-  "title": "Resumo diário agregado do Batuta",
-  "description": "O ÚNICO formato que sai da máquina do usuário, e só com opt-in explícito (`batuta config envio sim`). Uma linha por skill por dia, produzido por `batuta resumo --dia AAAA-MM-DD` (registro.rs, fn resumo_diario). Não contém prompt, hash de prompt, id de turno, caminho de arquivo, nome de usuário, IP nem geolocalização — se algum desses aparecer no corpo, é bug do cliente e o ingest recusa. Campo a campo idêntico ao que `crates/batuta/src/registro.rs` serializa via `json::escrever` (chaves em ordem alfabética, sem espaço).",
+  "title": "Batuta's aggregated daily summary",
+  "description": "The ONLY format that leaves the user's machine, and only with explicit opt-in (`batuta config envio sim`). One line per skill per day, produced by `batuta resumo --dia AAAA-MM-DD` (registro.rs, fn resumo_diario). Contains no prompt, prompt hash, turn id, file path, username, IP, or geolocation — if any of these show up in the body, it's a client bug and the ingest rejects it. Field for field identical to what `crates/batuta/src/registro.rs` serializes via `json::escrever` (keys in alphabetical order, no spaces).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -22,60 +22,60 @@
   "properties": {
     "schema": {
       "const": "batuta.resumo_diario.v1",
-      "description": "Versão do formato. Mudou o conjunto de campos, muda o sufixo — série histórica não se remenda em silêncio."
+      "description": "Format version. If the set of fields changes, the suffix changes — historical series don't get silently patched."
     },
     "dia": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-      "description": "Dia UTC agregado (data::dia_utc). UTC e não fuso local: fuso local vaza aproximação de onde a pessoa está."
+      "description": "Aggregated UTC day (data::dia_utc). UTC, not local timezone: local timezone leaks an approximation of where the person is."
     },
     "instalacao": {
       "type": "string",
       "pattern": "^[0-9a-f]{16}$",
-      "description": "sha256('instalacao|'+sal)[..16] (casa::id_instalacao). Derivado do sal local: não carrega hostname, usuário nem caminho. Serve só para dizer 'estas linhas vieram da mesma máquina'."
+      "description": "sha256('instalacao|'+sal)[..16] (casa::id_instalacao). Derived from the local salt: carries no hostname, username, or path. Only serves to say 'these lines came from the same machine'."
     },
     "batuta_versao": {
       "type": "string",
       "minLength": 1,
-      "description": "CARGO_PKG_VERSION do binário que gerou a linha. Sem isto, comparar dias de versões diferentes é comparar réguas diferentes."
+      "description": "CARGO_PKG_VERSION of the binary that generated the line. Without this, comparing days across different versions is comparing different rulers."
     },
     "modo": {
       "type": "string",
       "minLength": 1,
-      "description": "De onde veio o dado agregado. Hoje o CLI escreve 'local'; 'degradado' marca dado colhido via MCP (§4.1), onde não há hook e o funil é incompleto.",
+      "description": "Where the aggregated data came from. Today the CLI writes 'local'; 'degradado' marks data collected via MCP (§4.1), where there is no hook and the funnel is incomplete.",
       "examples": ["local", "degradado"]
     },
     "rotas": {
       "type": "integer",
       "minimum": 0,
-      "description": "Turnos vistos pelo roteador no dia (denominador do funil)."
+      "description": "Turns seen by the router during the day (funnel denominator)."
     },
     "rotas_com_sugestao": {
       "type": "integer",
       "minimum": 0,
-      "description": "Turnos em que o roteador falou. rotas - rotas_com_sugestao = silêncio (que é resultado desejável, não falha)."
+      "description": "Turns in which the router spoke. rotas - rotas_com_sugestao = silence (which is a desirable result, not a failure)."
     },
     "rotas_holdout": {
       "type": "integer",
       "minimum": 0,
-      "description": "Turnos em que o roteador se calou DE PROPÓSITO (§6). É o grupo de controle; sem ele o lift mede correlação."
+      "description": "Turns in which the router stayed silent ON PURPOSE (§6). It's the control group; without it, lift measures correlation."
     },
     "braco_com": {
       "$ref": "#/$defs/braco",
-      "description": "Desfecho dos turnos em que o roteador falou."
+      "description": "Outcome of the turns in which the router spoke."
     },
     "braco_holdout": {
       "$ref": "#/$defs/braco",
-      "description": "Desfecho dos turnos de holdout. Comparar com braco_com dá o lift causal."
+      "description": "Outcome of the holdout turns. Comparing with braco_com gives the causal lift."
     },
     "vies_declarado": {
       "type": "string",
       "minLength": 1,
-      "description": "Frase fixa que viaja junto com o dado (§1.5). O viés não vira nota de rodapé no site: anda colado na linha."
+      "description": "Fixed phrase that travels along with the data (§1.5). The bias doesn't become a footnote on the site: it stays glued to the line."
     },
     "skills": {
       "type": "array",
-      "description": "Uma entrada por skill sugerida no dia, em ordem alfabética (BTreeMap do Rust). Vazio é resposta legítima: dia sem rota.",
+      "description": "One entry per skill suggested during the day, in alphabetical order (Rust's BTreeMap). Empty is a legitimate response: a day with no routes.",
       "items": { "$ref": "#/$defs/skill" }
     }
   },
@@ -85,8 +85,8 @@
       "additionalProperties": false,
       "required": ["ok", "n"],
       "properties": {
-        "ok": { "type": "integer", "minimum": 0, "description": "Turnos julgados como terminados bem." },
-        "n": { "type": "integer", "minimum": 0, "description": "Turnos julgados no braço. n pequeno é motivo para não publicar conclusão." }
+        "ok": { "type": "integer", "minimum": 0, "description": "Turns judged to have ended well." },
+        "n": { "type": "integer", "minimum": 0, "description": "Turns judged in the arm. A small n is reason not to publish a conclusion." }
       }
     },
     "skill": {
@@ -110,21 +110,21 @@
         "fantasma"
       ],
       "properties": {
-        "skill": { "type": "string", "minLength": 1, "description": "Nome da skill como está no frontmatter local." },
-        "versao": { "type": "string", "description": "Versão declarada pela skill. String vazia quando a skill não versiona — e isso, por si, é um dado sobre a qualidade do ecossistema." },
-        "rotas": { "type": "integer", "minimum": 0, "description": "Vezes que o roteador sugeriu esta skill." },
-        "ativacoes": { "type": "integer", "minimum": 0, "description": "Vezes que a skill realmente disparou. ativacoes ÷ rotas é a taxa de disparo (§4.4)." },
-        "ativacoes_usuario": { "type": "integer", "minimum": 0, "description": "Subconjunto de ativacoes disparado pelo usuário, não pelo modelo (evento OTEL claude_code.skill_activated)." },
+        "skill": { "type": "string", "minLength": 1, "description": "Skill name as it appears in the local frontmatter." },
+        "versao": { "type": "string", "description": "Version declared by the skill. Empty string when the skill doesn't version itself — and that, in itself, is data about the quality of the ecosystem." },
+        "rotas": { "type": "integer", "minimum": 0, "description": "Number of times the router suggested this skill." },
+        "ativacoes": { "type": "integer", "minimum": 0, "description": "Number of times the skill actually fired. ativacoes ÷ rotas is the trigger rate (§4.4)." },
+        "ativacoes_usuario": { "type": "integer", "minimum": 0, "description": "Subset of ativacoes triggered by the user, not by the model (OTEL event claude_code.skill_activated)." },
         "turnos_julgados": { "type": "integer", "minimum": 0 },
-        "turnos_ok": { "type": "integer", "minimum": 0, "description": "turnos_ok ≤ turnos_julgados. O denominador anda junto de propósito: taxa sem n não é número." },
-        "reprompts": { "type": "integer", "minimum": 0, "description": "Proxy duro de desfecho ruim — não depende do juiz." },
+        "turnos_ok": { "type": "integer", "minimum": 0, "description": "turnos_ok ≤ turnos_julgados. The denominator travels along on purpose: a rate without n isn't a number." },
+        "reprompts": { "type": "integer", "minimum": 0, "description": "Hard proxy for a bad outcome — doesn't depend on the judge." },
         "erros": { "type": "integer", "minimum": 0 },
         "retries": { "type": "integer", "minimum": 0 },
         "tokens_in": { "type": "number", "minimum": 0 },
         "tokens_out": { "type": "number", "minimum": 0 },
-        "custo_usd": { "type": "number", "minimum": 0, "description": "Soma no dia. Dividido por turnos_ok vira custo por tarefa concluída — a métrica que ninguém mais tem (§4.4)." },
-        "turnos_ate_fim_mediana": { "type": "number", "minimum": 0, "description": "Mediana, não média: um turno perdido de 40 idas e vindas não pode arrastar o número." },
-        "fantasma": { "type": "boolean", "description": "rotas ≥ 5 e ativacoes = 0. Skill que o roteador insiste em sugerir e ninguém usa." }
+        "custo_usd": { "type": "number", "minimum": 0, "description": "Sum for the day. Divided by turnos_ok it becomes cost per completed task — the metric nobody else has (§4.4)." },
+        "turnos_ate_fim_mediana": { "type": "number", "minimum": 0, "description": "Median, not average: one outlier turn with 40 back-and-forths shouldn't drag the number." },
+        "fantasma": { "type": "boolean", "description": "rotas ≥ 5 and ativacoes = 0. A skill the router keeps suggesting that nobody uses." }
       }
     }
   }

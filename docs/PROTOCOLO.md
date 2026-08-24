@@ -1,79 +1,79 @@
-# PROTOCOLO — Batuta Zero
+# PROTOCOL — Batuta Zero
 
-Procedimento executável do primeiro experimento do Batuta. Escrito para o Filipe
-rodar sozinho, do começo ao fim, sem precisar decidir nada no meio do caminho.
+Executable procedure for Batuta's first experiment. Written for Filipe to
+run alone, start to finish, without having to decide anything along the way.
 
-**Tamanho da primeira leva:** 5 tarefas × 4 modelos × 2 braços = **40 rodadas**
-(≈ 1 semana).
+**Size of the first batch:** 5 tasks × 4 models × 2 arms = **40 runs**
+(≈ 1 week).
 
-O dado zero não vale pelo resultado. Vale por ser o primeiro número do mundo sobre
-skills produzido com ordem sorteada, sessão limpa, julgamento cego e cru publicado.
-Se o protocolo escorregar, o dado vira lixo — e lixo publicado com carimbo de
-medição é pior que nenhum dado.
+The zero data point isn't valuable for its result. It's valuable for being the world's
+first number about skills produced with randomized order, a clean session, blind judging, and published raw data.
+If the protocol slips, the data becomes garbage — and garbage published with a
+measurement stamp is worse than no data at all.
 
 ---
 
-## 0. Antes de começar
+## 0. Before starting
 
-### 0.1 As cinco tarefas
+### 0.1 The five tasks
 
-Não se escreve tarefa nova para o Zero. Usa-se a bateria congelada, para que o
-primeiro dado já seja comparável com tudo que vem depois.
+No new task gets written for Zero. The frozen battery is used, so the
+first data point is already comparable with everything that comes after.
 
-| código do Zero | tarefa da bateria v1 | categoria | verificação |
+| Zero code | v1 battery task | category | verification |
 |---|---|---|---|
-| `z-01` | `cod-01` | codigo | automática |
-| `z-02` | `cod-02` | codigo | automática |
-| `z-03` | `cod-03` | codigo | automática |
-| `z-04` | `cod-04` | codigo | automática |
-| `z-05` | `esc-01` | escrita | mista |
+| `z-01` | `cod-01` | codigo | automatic |
+| `z-02` | `cod-02` | codigo | automatic |
+| `z-03` | `cod-03` | codigo | automatic |
+| `z-04` | `cod-04` | codigo | automatic |
+| `z-05` | `esc-01` | escrita | mixed |
 
-Quatro automáticas dão o número quase de graça. A quinta existe para o
-procedimento de julgamento cego rodar de verdade nesta leva, e não estrear em
-produção.
+Four automatic ones give the number almost for free. The fifth exists so the
+blind-judging procedure actually runs for real in this batch, instead of debuting in
+production.
 
-### 0.2 Os quatro modelos
+### 0.2 The four models
 
-Um por faixa. O nome exato entra em `manifesto.json` (passo 1.3), não neste
-documento — modelo troca, faixa não.
+One per tier. The exact name goes into `manifesto.json` (step 1.3), not this
+document — the model changes, the tier doesn't.
 
-| id | faixa |
+| id | tier |
 |---|---|
-| `m1` | topo pago |
-| `m2` | faixa média |
-| `m3` | pequeno |
-| `m4` | grátis / local |
+| `m1` | top-tier paid |
+| `m2` | mid tier |
+| `m3` | small |
+| `m4` | free / local |
 
-Canal único para todas as 40 rodadas: **OpenRouter**. Ver "canal não multiplica"
-em `bateria/v1/README.md`.
+Single channel for all 40 runs: **OpenRouter**. See "channel doesn't multiply"
+in `bateria/v1/README.md`.
 
-### 0.3 Os dois braços
+### 0.3 The two arms
 
-| id | o que está ligado |
+| id | what's turned on |
 |---|---|
-| `A` | `sem-nada` — nenhuma skill instalada, roteador desligado |
-| `B` | `com-skill` — apenas as `skills_candidatas` da tarefa, roteador ligado |
+| `A` | `sem-nada` — no skill installed, router off |
+| `B` | `com-skill` — only the task's `skills_candidatas`, router on |
 
-O enunciado é **idêntico, palavra por palavra**, nos dois. A diferença mora no
-ambiente e em nenhum outro lugar.
+The statement is **identical, word for word**, in both. The difference lives in the
+environment and nowhere else.
 
 ---
 
-## 1. Passos
+## 1. Steps
 
-### Passo 1 — Fixar o terreno (uma vez, antes de qualquer rodada)
+### Step 1 — Fix the ground (once, before any run)
 
-**1.1 Criar a estrutura.**
+**1.1 Create the structure.**
 
 ```bash
 mkdir -p ~/batuta-zero/{tarefas,rodadas,cego,vereditos,publicacao}
 cd ~/batuta-zero
 ```
 
-**1.2 Publicar a semente, antes de tudo.**
+**1.2 Publish the seed, before anything else.**
 
-A semente é o que torna o sorteio auditável: qualquer pessoa refaz o sorteio e tem
-que chegar na mesma ordem.
+The seed is what makes the randomization auditable: anyone can redo the randomization and
+must arrive at the same order.
 
 ```bash
 SEED="batuta-zero-v1-$(date +%Y-%m-%d)-$(head -c 8 /dev/urandom | xxd -p)"
@@ -83,10 +83,10 @@ git add SEED.txt && git commit -m "batuta zero: semente publicada antes da prime
 git push
 ```
 
-O commit da semente **vem antes** da primeira rodada. Semente publicada depois não
-vale nada: quem publica depois escolhe a semente que dá a ordem que quer.
+The seed's commit **comes before** the first run. A seed published afterward is
+worthless: whoever publishes it later picks the seed that gives the order they want.
 
-**1.3 Congelar o manifesto da leva.**
+**1.3 Freeze the batch's manifest.**
 
 ```bash
 cat > manifesto.json <<'JSON'
@@ -109,10 +109,10 @@ cat > manifesto.json <<'JSON'
 JSON
 ```
 
-Preencher os `PREENCHER` com o identificador e a versão servida de cada modelo,
-copiados do canal. Commit antes da primeira rodada.
+Fill in the `PREENCHER` placeholders with each model's identifier and the version
+served, copied from the channel. Commit before the first run.
 
-**1.4 Extrair os cinco enunciados, palavra por palavra.**
+**1.4 Extract the five statements, word for word.**
 
 ```bash
 python3 - <<'PY'
@@ -130,23 +130,24 @@ sha256sum tarefas/*.md > tarefas/CHECKSUMS.txt
 git add tarefas && git commit -m "batuta zero: enunciados congelados" && git push
 ```
 
-A partir daqui, `tarefas/*.md` é lei. Conferir os checksums antes de cada dia de
-rodada:
+From here on, `tarefas/*.md` is law. Check the checksums before each day of
+runs:
 
 ```bash
 sha256sum -c tarefas/CHECKSUMS.txt
 ```
 
-Se falhar, a série está contaminada: para tudo e recomeça (seção 4).
+If it fails, the series is contaminated: stop everything and start over (section 4).
 
 ---
 
-### Passo 2 — Sortear a ordem dos braços, de forma determinística
+### Step 2 — Randomize the order of the arms, deterministically
 
-Rodar o braço B sempre primeiro mede aquecimento, não skill. A ordem de cada par
-(tarefa × modelo) é sorteada — e o sorteio sai da semente, não do dedo.
+Always running arm B first measures warm-up, not skill. The order of each pair
+(task × model) is randomized — and the randomization comes from the seed, not from a
+finger in the air.
 
-**2.1 A função de sorteio.**
+**2.1 The randomization function.**
 
 ```bash
 . ./SEED.txt
@@ -157,7 +158,7 @@ braco_primeiro () {   # $1 = tarefa, $2 = modelo
 }
 ```
 
-**2.2 Gerar o plano das 20 duplas (40 rodadas).**
+**2.2 Generate the plan for the 20 pairs (40 runs).**
 
 ```bash
 : > plano.tsv
@@ -171,20 +172,20 @@ sha256sum plano.tsv > plano.sha256
 git add plano.tsv plano.sha256 && git commit -m "batuta zero: plano sorteado" && git push
 ```
 
-O plano é reprodutível: quem tiver `SEED.txt` roda os mesmos comandos e obtém
-`plano.tsv` byte a byte igual. É isso que faz "sorteado" significar alguma coisa.
+The plan is reproducible: whoever has `SEED.txt` runs the same commands and gets
+`plano.tsv` byte-for-byte identical. That's what makes "randomized" mean something.
 
-**2.3 Ordem das rodadas no dia.** Seguir `plano.tsv` de cima para baixo. Não pular
-linha porque "essa vai demorar". Pular na hora é escolher.
+**2.3 Order of runs on the day.** Follow `plano.tsv` top to bottom. Don't skip a
+line because "this one will take a while." Skipping on the spot is choosing.
 
 ---
 
-### Passo 3 — Rodar uma rodada (repetir 40 vezes)
+### Step 3 — Run a run (repeat 40 times)
 
-Cada rodada tem um identificador: `<tarefa>-<modelo>-<braco>`, por exemplo
+Each run has an identifier: `<tarefa>-<modelo>-<braco>`, for example
 `z-02-m3-B`.
 
-**3.1 Diretório limpo.**
+**3.1 Clean directory.**
 
 ```bash
 R="z-02-m3-B"                      # trocar a cada rodada
@@ -193,42 +194,42 @@ mkdir -p "rodadas/$R/trabalho"
 cd "rodadas/$R/trabalho"
 ```
 
-**3.2 Gerar os insumos.** Rodar, em ordem, cada `gerador` da tarefa em
-`tarefas.json`, com `trabalho/` como diretório corrente. Conferir:
+**3.2 Generate the inputs.** Run, in order, each task `gerador` in
+`tarefas.json`, with `trabalho/` as the current directory. Check:
 
 ```bash
 ls -la
 sha256sum * > ../INSUMOS.sha256
 ```
 
-Os mesmos insumos, byte a byte, nos dois braços. Se os checksums de A e B diferirem,
-a dupla está queimada e se refaz inteira.
+The same inputs, byte for byte, in both arms. If the checksums for A and B differ,
+the pair is burned and gets redone entirely.
 
-**3.3 Sessão limpa. Sem exceção.**
+**3.3 Clean session. No exception.**
 
-- Janela nova, conversa nova, zero histórico.
-- Nada de "continua daí", nada de "igual ao anterior".
-- No braço A: nenhuma skill instalada e roteador desligado — conferir, não supor.
-- No braço B: **apenas** as `skills_candidatas` da tarefa instaladas.
-- Temperatura 0, ou o mínimo que o canal aceitar; anotar qual foi.
-- Entre a rodada A e a rodada B da mesma dupla, fechar o cliente inteiro.
+- New window, new conversation, zero history.
+- None of "continue from there," none of "same as last time."
+- In arm A: no skill installed and router off — check, don't assume.
+- In arm B: **only** the task's `skills_candidatas` installed.
+- Temperature 0, or the minimum the channel accepts; note which it was.
+- Between the A run and the B run of the same pair, close the client entirely.
 
-Conferência antes de colar o enunciado:
+Check before pasting the statement:
 
 ```bash
 ls ~/.claude/skills 2>/dev/null || echo "(nenhuma skill instalada)"
 ```
 
-**3.4 Colar o enunciado.** `cat ../../../tarefas/z-02.md` e colar. Nada antes,
-nada depois. Sem "por favor", sem "capriche", sem "use a skill X". Se o modelo
-perguntar algo, responder **apenas** com o que já está no enunciado ou nos insumos;
-se a resposta não estiver lá, responder "siga o enunciado" e registrar a pergunta
-em `meta.json`.
+**3.4 Paste the statement.** `cat ../../../tarefas/z-02.md` and paste it. Nothing
+before, nothing after. No "please," no "do a great job," no "use skill X." If the model
+asks something, answer **only** with what's already in the statement or the inputs;
+if the answer isn't there, answer "follow the statement" and log the question
+in `meta.json`.
 
-**3.5 Deixar trabalhar** até o `teto_turnos` da tarefa. Estourou sem entregar:
-registra `reprovada_por_teto`. Não é descarte — é resultado.
+**3.5 Let it work** up to the task's `teto_turnos`. If it exceeds it without delivering:
+log `reprovada_por_teto`. That's not a discard — it's a result.
 
-**3.6 Guardar a saída crua.**
+**3.6 Save the raw output.**
 
 ```bash
 cd ..
@@ -238,7 +239,7 @@ cp -a trabalho/. saida/            # todos os arquivos produzidos
 #   saida/transcricao.md
 ```
 
-**3.7 Rodar o verificador** (tarefas `automatica` e `mista`):
+**3.7 Run the verifier** (tasks `automatica` and `mista`):
 
 ```bash
 cd trabalho
@@ -249,20 +250,20 @@ echo "codigo de saida: $?"
 cd ..
 ```
 
-**3.8 Fechar o registro** da rodada em `meta.json` (modelo da seção 3).
+**3.8 Close out the record** of the run in `meta.json` (schema from section 3).
 
-**3.9 Voltar para a raiz** e ir para a próxima linha do plano.
+**3.9 Go back to the root** and move to the next line of the plan.
 
 ---
 
-### Passo 4 — Anonimizar para o julgamento cego
+### Step 4 — Anonymize for blind judging
 
-Julgamento cego **inclusive do Filipe**. Quem sabe qual saída é do braço com skill
-encontra qualidade nela — não por má-fé, por ser humano.
+Blind judging **including Filipe**. Whoever knows which output is from the skill arm
+finds quality in it — not out of bad faith, just from being human.
 
-**4.1 Varrer autodelação.** A saída às vezes se entrega ("como assistente da
-X…", "seguindo a skill Y…"). Isso não se apaga do cru; se substitui **na cópia
-cega**, e a substituição fica registrada.
+**4.1 Scan for self-disclosure.** The output sometimes gives itself away ("as X's
+assistant…", "following skill Y…"). This isn't erased from the raw data; it's replaced
+**in the blind copy**, and the replacement is logged.
 
 ```bash
 grep -rniE 'skill|claude|gpt|gemini|llama|mistral|anthropic|openai' rodadas/*/saida/ \
@@ -270,7 +271,7 @@ grep -rniE 'skill|claude|gpt|gemini|llama|mistral|anthropic|openai' rodadas/*/sa
 wc -l cego/autodelacao.log
 ```
 
-**4.2 Gerar as cópias cegas com código opaco.**
+**4.2 Generate the blind copies with an opaque code.**
 
 ```bash
 : > mapa.tsv
@@ -286,7 +287,7 @@ for d in rodadas/*/; do
 done
 ```
 
-**4.3 Selar o mapa antes de olhar qualquer saída.**
+**4.3 Seal the map before looking at any output.**
 
 ```bash
 sha256sum mapa.tsv > mapa.sha256
@@ -295,11 +296,11 @@ mv mapa.tsv ~/.batuta-zero-mapa-selado.tsv     # fora da pasta de trabalho
 chmod 400 ~/.batuta-zero-mapa-selado.tsv
 ```
 
-O hash vai para o repositório **antes** do julgamento. O arquivo sai da pasta. No
-fim, o mapa é publicado e qualquer pessoa confere que ele é o mesmo que foi selado.
-É isso que impede a versão conveniente do mapa de aparecer depois.
+The hash goes to the repository **before** judging. The file leaves the folder. In
+the end, the map is published and anyone can check it's the same one that was sealed.
+That's what stops a convenient version of the map from showing up later.
 
-**4.4 Embaralhar a ordem de julgamento, também pela semente.**
+**4.4 Shuffle the judging order, also via the seed.**
 
 ```bash
 . ./SEED.txt
@@ -309,35 +310,35 @@ ls cego | grep -v autodelacao.log | LC_ALL=C sort \
 head ordem_julgamento.txt
 ```
 
-Julgar nessa ordem, de cima para baixo, sem espiar a lista inteira antes.
+Judge in that order, top to bottom, without peeking at the whole list beforehand.
 
 ---
 
-### Passo 5 — Julgar
+### Step 5 — Judge
 
-**5.1 O que se julga.** Para cada código de `ordem_julgamento.txt`, abrir
-`cego/<codigo>/`, ler a tarefa correspondente em `tarefas/` (o código não diz qual
-é; o conteúdo da pasta diz) e responder **sim ou não** a cada item do
-`criterio_aceite` daquela tarefa. Nada de nota geral antes dos itens.
+**5.1 What gets judged.** For each code in `ordem_julgamento.txt`, open
+`cego/<codigo>/`, read the corresponding task in `tarefas/` (the code doesn't say
+which one it is; the folder's content does) and answer **yes or no** to each item of
+that task's `criterio_aceite`. No overall score before the items.
 
-**5.2 Gravar o veredito** em `vereditos/<codigo>.json` (modelo na seção 3).
+**5.2 Record the verdict** in `vereditos/<codigo>.json` (schema in section 3).
 
-**5.3 Não voltar atrás.** Veredito gravado não se reabre depois de o mapa ser
-revelado. Se bater arrependimento, ele entra como observação pública, não como
-correção.
+**5.3 No going back.** A recorded verdict doesn't get reopened after the map is
+revealed. If second-guessing hits, it goes in as a public observation, not as a
+correction.
 
-**5.4 Só depois dos 40 vereditos**, revelar o mapa — conferindo antes que ele é o
-mesmo que foi selado:
+**5.4 Only after the 40 verdicts**, reveal the map — checking first that it's the
+same one that was sealed:
 
 ```bash
 cp ~/.batuta-zero-mapa-selado.tsv mapa.tsv
 sha256sum -c mapa.sha256        # tem que imprimir: mapa.tsv: OK
 ```
 
-Se der `FAILED`, **a leva inteira é descartada e publicada como descartada**, com o
-motivo escrito. Descarte publicado vale mais que resultado salvo.
+If it says `FAILED`, **the whole batch is discarded and published as discarded**, with
+the reason written down. A published discard is worth more than a saved result.
 
-Só com o `OK` na tela é que se junta veredito com rodada:
+Only with `OK` on screen does the verdict get joined with the run:
 
 ```bash
 join -1 1 -2 1 -t $'\t' <(LC_ALL=C sort mapa.tsv) \
@@ -350,10 +351,10 @@ cat resultados.tsv
 
 ---
 
-### Passo 6 — Publicar o cru
+### Step 6 — Publish the raw data
 
-O que separa o Batuta de um README autoproclamado: qualquer pessoa consegue
-refazer o julgamento e discordar.
+What separates Batuta from a self-proclaimed README: anyone can redo the judging
+and disagree.
 
 ```bash
 mkdir -p publicacao
@@ -368,95 +369,96 @@ python3 -c "import pathlib,hashlib;[print(hashlib.sha256(p.read_bytes()).hexdige
 git add publicacao && git commit -m "batuta zero leva 1: cru completo" && git push
 ```
 
-Para cada dupla, a publicação carrega: **o enunciado + as duas saídas + o
-veredito**. Mais o plano sorteado, a semente, o mapa selado e os checksums.
+For each pair, the publication carries: **the statement + both outputs + the
+verdict**. Plus the randomized plan, the seed, the sealed map, and the checksums.
 
-Encadear com o hash da publicação anterior e carimbar o topo no OpenTimestamps,
-conforme §8 do dossiê.
+Chain it to the hash of the previous publication and stamp the top on OpenTimestamps,
+per §8 of the dossier.
 
 ---
 
-## 2. O JUIZ
+## 2. THE JUDGE
 
-### 2.1 As três leis
+### 2.1 The three laws
 
-**Lei 1 — Cego.** O juiz não sabe se a skill disparou, qual braço produziu a
-saída, nem qual modelo a escreveu. Se souber, confirma o que a gente quer ouvir e o
-número morre. Vale para o juiz-modelo e vale para o Filipe.
+**Law 1 — Blind.** The judge doesn't know whether the skill fired, which arm
+produced the output, or which model wrote it. If it knows, it confirms what we want to
+hear and the number dies. This applies to the judge-model and it applies to Filipe.
 
-**Lei 2 — Não é o réu.** Modelo nunca julga a própria saída. Julgamento **cruzado,
-sempre**. Pares da leva 1:
+**Law 2 — Not the defendant.** A model never judges its own output. Judging is
+**cross, always**. Pairs for batch 1:
 
-| saída de | julgada por |
+| output from | judged by |
 |---|---|
-| `m1` (topo pago) | `m2` |
-| `m2` (média) | `m1` |
-| `m3` (pequeno) | `m1` |
-| `m4` (grátis/local) | `m2` |
+| `m1` (top-tier paid) | `m2` |
+| `m2` (mid-tier) | `m1` |
+| `m3` (small) | `m1` |
+| `m4` (free/local) | `m2` |
 
-Nenhum modelo aparece nas duas colunas da mesma linha. O juiz-modelo é da faixa
-alta porque julgar é mais barato que produzir — o custo do juiz não é o gargalo.
+No model appears in both columns of the same row. The judge-model is from the top
+tier because judging is cheaper than producing — the judge's cost isn't the bottleneck.
 
-**Lei 3 — Versionado.** Junto de **cada** veredito se grava: identificador do
-modelo-juiz, versão exata servida pelo canal, **o prompt inteiro** do juiz (não um
-resumo, não um link — o texto), a temperatura e o hash desse prompt. Juiz que muda
-sem changelog invalida a série histórica inteira, retroativamente.
+**Law 3 — Versioned.** Recorded alongside **every** verdict: the judge-model's
+identifier, the exact version served by the channel, **the judge's entire prompt** (not a
+summary, not a link — the text), the temperature, and that prompt's hash. A judge that
+changes without a changelog invalidates the whole historical series, retroactively.
 
-Toda vez que o prompt do juiz mudar: nova versão (`juiz-v1` → `juiz-v2`), entrada
-no changelog, e as séries anteriores continuam marcadas com a versão antiga. Não se
-recalcula o passado com o juiz novo — se recalcula e se publica **as duas** séries,
-declarando qual é qual.
+Every time the judge's prompt changes: new version (`juiz-v1` → `juiz-v2`), a
+changelog entry, and previous series stay marked with the old version. The past isn't
+recalculated with the new judge — it's recalculated and **both** series are published,
+declaring which is which.
 
-**Juiz é sinal, não verdade.** Ele entra ao lado dos proxies duros (reprompt, erro,
-retry, código de saída do verificador). Onde o verificador reprova, o juiz não é
-consultado: saída que falhou no objetivo não se salva na conversa.
+**The judge is a signal, not truth.** It sits alongside the hard proxies (reprompt, error,
+retry, the verifier's exit code). Where the verifier fails, the judge isn't
+consulted: output that failed the objective doesn't get saved by the conversation.
 
-### 2.2 Rubrica por categoria
+### 2.2 Rubric by category
 
-A rubrica não substitui o `criterio_aceite` — ela vem **depois** dele. Primeiro o
-juiz responde sim/não a cada critério; a rubrica só é aplicada às saídas que
-passaram em todos os critérios, para separar o que é "cumpriu" do que é "cumpriu
-bem". Cada eixo vale 0, 1 ou 2.
+The rubric doesn't replace `criterio_aceite` — it comes **after** it. First the
+judge answers yes/no to each criterion; the rubric is only applied to outputs that
+passed every criterion, to separate "met it" from "met it
+well." Each axis is worth 0, 1, or 2.
 
-**`codigo`** — o verificador já disse se passa. A rubrica olha o resto:
-1. *Sobrevivência*: trata entrada vazia, limite e tipo errado sem quebrar.
-2. *Legibilidade*: um humano acha o defeito em menos de 2 minutos.
-3. *Contenção*: não reescreveu o que não foi pedido, não trouxe dependência nova.
+**`codigo`** — the verifier already said whether it passes. The rubric looks at the rest:
+1. *Survival*: handles empty input, boundary, and wrong type without breaking.
+2. *Readability*: a human finds the defect in under 2 minutes.
+3. *Restraint*: didn't rewrite what wasn't asked for, didn't bring in a new dependency.
 
 **`escrita`**:
-1. *Fidelidade factual*: nenhum fato entrou, saiu ou mudou de valor.
-2. *Serve ao leitor declarado*: o destinatário do enunciado entende sem reler.
-3. *Densidade*: cada frase carrega informação; nenhuma existe só para soar bem.
+1. *Factual fidelity*: no fact was added, removed, or changed value.
+2. *Serves the declared reader*: the statement's addressee understands without rereading.
+3. *Density*: every sentence carries information; none exists just to sound good.
 
 **`dados`**:
-1. *Número certo*: bate com o recomputado a partir do insumo.
-2. *Método declarado*: dá para refazer a conta lendo o que ele escreveu.
-3. *Tratamento de borda*: empate, ausente, duplicata e valor impossível ganharam
-   decisão explícita.
+1. *Correct number*: matches what's recomputed from the input.
+2. *Declared method*: you can redo the math by reading what it wrote.
+3. *Edge-case handling*: ties, missing values, duplicates, and impossible values
+   got an explicit decision.
 
 **`documentos`**:
-1. *Formato real*: o arquivo abre no programa de destino, não é outra coisa com a
-   extensão trocada.
-2. *Estrutura pedida*: seções, ordem e contagens conforme o enunciado.
-3. *Rastreabilidade*: todo campo preenchido tem origem apontável no insumo.
+1. *Real format*: the file opens in the target program, it's not something else with
+   a swapped extension.
+2. *Requested structure*: sections, order, and counts match the statement.
+3. *Traceability*: every filled field has a traceable origin in the input.
 
 **`pesquisa`**:
-1. *Ancoragem*: toda afirmação carrega de onde saiu.
-2. *Declara a lacuna*: o que o material não responde aparece como não respondido,
-   em vez de ser preenchido com plausibilidade.
-3. *Tensão vista*: onde as fontes discordam, a discordância é nomeada, não
-   suavizada.
+1. *Anchoring*: every claim carries where it came from.
+2. *Declares the gap*: what the material doesn't answer shows up as unanswered,
+   instead of being filled in with plausibility.
+3. *Tension acknowledged*: where sources disagree, the disagreement is named, not
+   smoothed over.
 
 **`automacao`**:
-1. *Idempotência*: rodar duas vezes não estraga nada.
-2. *Falha visível*: quebra com código de saída != 0 e mensagem no lugar certo.
-3. *Retomada*: o estado permite continuar de onde parou, sem refazer o já feito.
+1. *Idempotence*: running it twice breaks nothing.
+2. *Visible failure*: breaks with a non-zero exit code and a message in the right place.
+3. *Resumability*: the state lets it continue from where it stopped, without redoing
+   what's already done.
 
-Escala final por saída: `aprovada` (todos os critérios sim) ou `reprovada` (algum
-não), mais o total da rubrica de 0 a 6. **A aprovação é o número principal.** A
-rubrica é desempate e só aparece publicada ao lado da aprovação, nunca sozinha.
+Final scale per output: `aprovada` (every criterion yes) or `reprovada` (any
+no), plus the rubric total from 0 to 6. **Approval is the main number.** The
+rubric is a tiebreaker and only ever gets published alongside approval, never alone.
 
-### 2.3 O que se grava junto do veredito
+### 2.3 What gets recorded alongside the verdict
 
 ```json
 {
@@ -472,14 +474,14 @@ rubrica é desempate e só aparece publicada ao lado da aprovação, nunca sozin
 }
 ```
 
-Veredito sem `prompt_integral` não entra no dataset. Não há exceção "o prompt é
-longo".
+A verdict without `prompt_integral` doesn't enter the dataset. There's no
+"the prompt is long" exception.
 
 ---
 
-## 3. Modelos de registro
+## 3. Record schemas
 
-### 3.1 `rodadas/<id>/meta.json` — uma por rodada
+### 3.1 `rodadas/<id>/meta.json` — one per run
 
 ```json
 {
@@ -520,7 +522,7 @@ longo".
 }
 ```
 
-### 3.2 `vereditos/<codigo>.json` — um por saída cega
+### 3.2 `vereditos/<codigo>.json` — one per blind output
 
 ```json
 {
@@ -545,9 +547,9 @@ longo".
 }
 ```
 
-### 3.3 Planilha de acompanhamento (as 40 linhas)
+### 3.3 Tracking spreadsheet (the 40 rows)
 
-Uma linha por rodada. Colunas, nesta ordem:
+One row per run. Columns, in this order:
 
 ```
 rodada_id | tarefa_zero | tarefa_bateria | categoria | complexidade | modelo |
@@ -557,85 +559,88 @@ verificador_codigo_saida | desfecho | codigo_cego | aprovada | rubrica_total |
 tokens_entrada | tokens_saida | custo_usd | duracao_s | incidentes
 ```
 
-Exportar como CSV. `codigo_cego` e `aprovada` só se preenchem **depois** do passo
-5.4 — enquanto o julgamento corre, essas duas colunas ficam vazias na planilha e o
-arquivo não é aberto durante o julgamento.
+Export as CSV. `codigo_cego` and `aprovada` are only filled in **after** step
+5.4 — while judging is underway, those two columns stay empty in the spreadsheet and the
+file isn't opened during judging.
 
-**O número que interessa no fim** não é "quantas aprovadas". É, por faixa de
-modelo: `aprovadas(B) − aprovadas(A)`, e o **custo por tarefa concluída** em cada
-braço. Skill pode encarecer a chamada e baratear a tarefa, matando reprompts. É
-essa a métrica que ninguém publica.
-
----
-
-## 4. O que NUNCA pode acontecer
-
-Cada item abaixo, se acontecer, **contamina a leva**. A regra é a mesma para todos:
-para, registra o incidente e refaz o que couber — nunca "segue e depois a gente
-menciona".
-
-**Contaminação**
-1. Reaproveitar sessão, aba, contexto ou histórico entre duas rodadas.
-2. Rodar o braço B logo depois do A na mesma janela, sem fechar o cliente.
-3. Colar o enunciado com qualquer palavra a mais ou a menos.
-4. Responder a uma pergunta do modelo com informação que não está no enunciado nem
-   nos insumos.
-5. Ajudar durante a rodada: corrigir, apontar erro, sugerir caminho.
-6. Deixar skill instalada no braço A, ou skill fora das `skills_candidatas` no
-   braço B.
-7. Insumos diferentes entre A e B da mesma dupla (checar `INSUMOS.sha256`).
-8. Rodar a mesma dupla em dias com versões diferentes do mesmo modelo, sem registrar.
-
-**Rótulo visível**
-9. Julgar sabendo qual braço, qual modelo ou qual ordem produziu a saída.
-10. Nomear pasta, arquivo ou aba do julgamento com braço, modelo ou "com/sem".
-11. Abrir `mapa.tsv` — ou a planilha de acompanhamento — antes do último veredito.
-12. Deixar a saída se autodelatar na cópia cega sem passar pela varredura da 4.1.
-13. Julgar as duas saídas da mesma dupla em sequência: o embaralhamento existe para
-    isso.
-
-**Mexer na régua no meio**
-14. Editar enunciado, insumo, critério de aceite ou verificador depois da primeira
-    rodada da série.
-15. Trocar a semente, o plano ou a ordem sorteada depois de publicados.
-16. Acrescentar ou remover tarefa no meio da leva.
-17. Mudar o prompt do juiz durante o julgamento das 40.
-18. Reabrir veredito depois de o mapa ter sido revelado.
-
-**Publicação**
-19. Publicar número sem publicar o cru que o sustenta.
-20. Publicar rodada descartada como se não tivesse existido: descarte vai publicado,
-    com o motivo escrito.
-21. Publicar resultado sem canal, versão da bateria e versão do juiz.
+**The number that matters in the end** isn't "how many approved." It's, by
+model tier: `aprovadas(B) − aprovadas(A)`, and the **cost per completed task** in each
+arm. A skill can make the call more expensive and the task cheaper, by killing
+reprompts. That's the metric nobody publishes.
 
 ---
 
-## 5. Holdout causal
+## 4. What can NEVER happen
 
-Skill que aparece junto de bom resultado mostra correlação. Para medir **causa**,
-alguém precisa não receber a skill sem que isso dependa de quem é o usuário. É o
-grupo de controle.
+Every item below, if it happens, **contaminates the batch**. The rule is the same
+for all of them: stop, log the incident, and redo whatever needs it — never "keep
+going and mention it later."
 
-**Como funciona.** Em **5% dos turnos**, escolhidos por sorteio no momento do
-turno, o roteador **se cala de propósito**: não propõe skill nenhuma, mesmo tendo
-casamento claro. O turno é marcado `holdout: true` no evento e entra no dataset como
-controle.
+**Contamination**
+1. Reusing a session, tab, context, or history between two runs.
+2. Running arm B right after A in the same window, without closing the client.
+3. Pasting the statement with any word added or missing.
+4. Answering a model's question with information that isn't in the statement or the
+   inputs.
+5. Helping during the run: correcting, pointing out an error, suggesting a path.
+6. Leaving a skill installed in arm A, or a skill outside `skills_candidatas` in
+   arm B.
+7. Different inputs between A and B of the same pair (check `INSUMOS.sha256`).
+8. Running the same pair on days with different versions of the same model, without
+   recording it.
 
-**Condições, todas obrigatórias:**
+**Visible label**
+9. Judging while knowing which arm, which model, or which order produced the output.
+10. Naming a judging folder, file, or tab with arm, model, or "with/without."
+11. Opening `mapa.tsv` — or the tracking spreadsheet — before the last verdict.
+12. Letting the output give itself away in the blind copy without going through the
+    4.1 scan.
+13. Judging both outputs of the same pair back to back: the shuffling exists to
+    prevent this.
 
-1. **Declarado na cara do usuário.** Uma frase na primeira execução, e não escondida
-   em documentação: *"Em 5% dos turnos o Batuta fica calado de propósito, para medir
-   se a skill ajuda de verdade. Isso é o que torna o número honesto. Você pode
-   mudar a porcentagem ou desligar em `~/.batuta/config.json`."*
-2. **Configurável.** `holdout_pct` aceita qualquer valor de 0 a 100.
-3. **Desligável.** `holdout_pct = 0` desliga, e desligar não degrada nada além do
-   próprio holdout.
-4. **Marcado no dado.** Todo turno em holdout sobe marcado como tal. Turno de
-   holdout que não estiver marcado é dado corrompido.
-5. **Nunca silencioso.** Experimento escondido destrói o projeto — é o item 1 dos
-   riscos declarados. Se a declaração não couber na interface, o holdout não roda.
+**Moving the ruler midway**
+14. Editing the statement, input, acceptance criterion, or verifier after the
+    series' first run.
+15. Changing the seed, the plan, or the randomized order after they've been
+    published.
+16. Adding or removing a task mid-batch.
+17. Changing the judge's prompt during the judging of the 40.
+18. Reopening a verdict after the map has been revealed.
 
-**Configuração:**
+**Publication**
+19. Publishing a number without publishing the raw data behind it.
+20. Publishing a discarded run as if it never existed: discards get published too,
+    with the reason written down.
+21. Publishing a result without channel, battery version, and judge version.
+
+---
+
+## 5. Causal holdout
+
+A skill that shows up alongside a good result shows correlation. To measure
+**causation**, someone needs to not receive the skill, without that depending on who
+the user is. That's the control group.
+
+**How it works.** On **5% of turns**, chosen by random draw at the moment of the
+turn, the router **stays silent on purpose**: it doesn't propose any skill, even with a
+clear match. The turn is marked `holdout: true` in the event and enters the dataset as
+a control.
+
+**Conditions, all mandatory:**
+
+1. **Declared right to the user's face.** One sentence on first run, not hidden
+   in documentation: *"On 5% of turns Batuta stays quiet on purpose, to measure
+   whether the skill actually helps. That's what makes the number honest. You can
+   change the percentage or turn it off in `~/.batuta/config.json`."*
+2. **Configurable.** `holdout_pct` accepts any value from 0 to 100.
+3. **Can be turned off.** `holdout_pct = 0` turns it off, and turning it off degrades
+   nothing besides the holdout itself.
+4. **Marked in the data.** Every holdout turn gets uploaded marked as such. A
+   holdout turn that isn't marked is corrupted data.
+5. **Never silent.** A hidden experiment destroys the project — it's item 1 of the
+   declared risks. If the disclosure doesn't fit in the interface, the holdout doesn't run.
+
+**Configuration:**
 
 ```json
 {
@@ -645,44 +650,43 @@ controle.
 }
 ```
 
-**No Batuta Zero, o holdout fica desligado** (`manifesto.json`, campo
-`holdout_causal`). O Zero já é um experimento controlado por construção: os dois
-braços são o controle. O holdout existe para a frota, onde não há como pedir que
-cada usuário rode a tarefa duas vezes.
+**In Batuta Zero, the holdout stays off** (`manifesto.json`, field
+`holdout_causal`). Zero is already a controlled experiment by construction: the two
+arms are the control. The holdout exists for the fleet, where there's no way to ask
+each user to run the task twice.
 
-**Como se lê o número.** Dentro da mesma instalação, mesmo perfil de uso e mesma
-janela de tempo, compara-se desfecho dos turnos `holdout: true` com desfecho dos
-turnos em que o roteador falou. A diferença é atribuível ao roteamento, não ao
-tipo de usuário — que é exatamente o que a comparação entre usuários não consegue
-dizer.
+**How to read the number.** Within the same install, same usage profile, and same
+time window, the outcome of `holdout: true` turns is compared against the outcome of
+turns where the router spoke up. The difference is attributable to routing, not to the
+type of user — which is exactly what a between-user comparison can't tell you.
 
 ---
 
-## 6. Checklist de bolso
+## 6. Pocket checklist
 
-Antes de cada rodada:
+Before each run:
 
-- [ ] `sha256sum -c tarefas/CHECKSUMS.txt` passou
-- [ ] próxima linha do `plano.tsv`, sem pular
-- [ ] diretório da rodada recriado do zero
-- [ ] insumos gerados e com checksum igual ao do outro braço
-- [ ] cliente fechado e reaberto; sessão nova
-- [ ] skills conferidas com `ls`, não supostas
-- [ ] enunciado colado sem uma palavra a mais
+- [ ] `sha256sum -c tarefas/CHECKSUMS.txt` passed
+- [ ] next line of `plano.tsv`, no skipping
+- [ ] run directory recreated from scratch
+- [ ] inputs generated with checksum matching the other arm
+- [ ] client closed and reopened; new session
+- [ ] skills checked with `ls`, not assumed
+- [ ] statement pasted without one extra word
 
-Antes de julgar:
+Before judging:
 
-- [ ] 40 rodadas fechadas, com `meta.json` preenchido
-- [ ] varredura de autodelação rodada e registrada
-- [ ] `mapa.sha256` commitado e o mapa fora da pasta de trabalho
-- [ ] `ordem_julgamento.txt` gerado pela semente
-- [ ] planilha de acompanhamento fechada
+- [ ] 40 runs closed out, with `meta.json` filled in
+- [ ] self-disclosure scan run and logged
+- [ ] `mapa.sha256` committed and the map out of the working folder
+- [ ] `ordem_julgamento.txt` generated from the seed
+- [ ] tracking spreadsheet closed out
 
-Antes de publicar:
+Before publishing:
 
-- [ ] `sha256sum -c mapa.sha256` confere
-- [ ] cru completo: enunciado + as duas saídas + veredito, para as 20 duplas
-- [ ] descartes publicados com motivo
-- [ ] prompt integral do juiz junto de cada veredito
-- [ ] canal, versão da bateria e versão do juiz em toda linha
-- [ ] hash encadeado com a publicação anterior e carimbo OpenTimestamps
+- [ ] `sha256sum -c mapa.sha256` checks out
+- [ ] complete raw data: statement + both outputs + verdict, for the 20 pairs
+- [ ] discards published with reason
+- [ ] judge's full prompt alongside every verdict
+- [ ] channel, battery version, and judge version on every row
+- [ ] hash chained to the previous publication and OpenTimestamps stamp

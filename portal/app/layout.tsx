@@ -3,11 +3,11 @@ import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
 import { Marca } from "../components/Marca";
 import "./globals.css";
 
-/* As três vozes da casa, servidas pelo próprio domínio (next/font baixa e hospeda):
-   nenhuma requisição sai para o Google em runtime, e não há salto de fonte na carga.
-   - serif  para o que AFIRMA (títulos, o nome)
-   - sans   para o que EXPLICA (prosa)
-   - mono   para o que MEDE (número, rótulo, comando, hash) */
+/* The house's three voices, served from our own domain (next/font downloads and hosts them):
+   no request goes out to Google at runtime, and there's no font flash on load.
+   - serif  for what ASSERTS (headings, the name)
+   - sans   for what EXPLAINS (prose)
+   - mono   for what MEASURES (number, label, command, hash) */
 const serif = Instrument_Serif({
   subsets: ["latin"],
   weight: "400",

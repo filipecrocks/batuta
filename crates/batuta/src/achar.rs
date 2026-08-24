@@ -1,16 +1,16 @@
-//! `batuta find` — caminho FRIO. Tres camadas, nesta ordem:
-//!   1. INSTALADA   — ja esta na maquina, e so usar
-//!   2. DISPONIVEL  — existe no registro publico, com o numero que o Batuta mediu
-//!   3. LACUNA      — ninguem tem; vira sugestao de tarefa para a arena
+//! `batuta find` — COLD path. Three layers, in this order:
+//!   1. INSTALLED   — already on the machine, just use it
+//!   2. AVAILABLE   — exists in the public registry, with the number Batuta measured
+//!   3. GAP         — nobody has it; becomes a task suggestion for the arena
 //!
-//! Aqui o ranqueamento e por TEXTO COMPLETO, nunca por nome+descricao. Isso nao e
-//! preferencia: o paper SkillRouter (arXiv 2603.22455) mediu queda de 31 a 44 pontos
-//! de acuracia quando se esconde o corpo da skill e se rankeia so pelo metadado, em
-//! benchmark de ~80 mil skills sobrepostas. No caminho quente, com 10 a 100 skills
-//! locais, a diferenca provavelmente some. Aqui, nao.
+//! Here ranking is by FULL TEXT, never by name+description. This isn't a
+//! preference: the SkillRouter paper (arXiv 2603.22455) measured a drop of 31 to 44
+//! accuracy points when the skill body is hidden and ranking relies only on
+//! metadata, on a benchmark of ~80 thousand overlapping skills. On the hot path,
+//! with 10 to 100 local skills, the difference probably disappears. Here, it doesn't.
 //!
-//! O binario continua sem rede. Quem baixa o registro e o wrapper (`batuta registro
-//! atualizar`); este comando so le o arquivo em cache.
+//! The binary still has no network access. Whoever downloads the registry is the
+//! wrapper (`batuta registro atualizar`); this command only reads the cached file.
 
 use crate::bm25;
 use crate::casa;
@@ -78,7 +78,7 @@ pub fn achar(consulta: &str) -> String {
             .to_string();
     }
 
-    // ---- 1. instalada
+    // ---- 1. installed
     s.push_str("INSTALADA — ja esta na sua maquina\n");
     let mut achou_local = false;
     if let Ok(bruto) = std::fs::read_to_string(casa::casa().join("indice.txt")) {
@@ -103,7 +103,7 @@ pub fn achar(consulta: &str) -> String {
         );
     }
 
-    // ---- 2. disponivel
+    // ---- 2. available
     s.push_str("\nDISPONIVEL — existe no registro publico\n");
     let mut achou_registro = false;
     match std::fs::read_to_string(caminho_registro()) {
@@ -152,7 +152,7 @@ pub fn achar(consulta: &str) -> String {
         }
     }
 
-    // ---- 3. lacuna
+    // ---- 3. gap
     if !achou_local && !achou_registro {
         s.push_str("\nLACUNA — ninguem tem isso ainda\n");
         s.push_str(

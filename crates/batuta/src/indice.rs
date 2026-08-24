@@ -1,21 +1,23 @@
-//! Indexador: varre pastas de skills, le o frontmatter e o corpo do SKILL.md e
-//! grava um indice invertido em ~/.batuta/indice.txt.
+//! Indexer: walks skill folders, reads the frontmatter and body of SKILL.md and
+//! writes an inverted index to ~/.batuta/indice.txt.
 //!
-//! Formato proprio, de uma linha por registro, em vez de JSON. Motivo medido, nao
-//! gosto: o caminho quente tem 100ms de orcamento inteiro, e so as linhas `P` dos
-//! termos da consulta precisam ser abertas. JSON obrigaria a parsear o arquivo todo.
+//! Custom format, one line per record, instead of JSON. Reason is measured, not
+//! taste: the hot path has a 100ms budget in total, and only the `P` lines for the
+//! query terms need to be opened. JSON would force parsing the whole file.
 //!
-//! O corpo do SKILL.md entra no indice, nao so nome e descricao. Isso vem do paper
-//! SkillRouter (arXiv 2603.22455): rankear so por nome+descricao derruba a acuracia
-//! em 31 a 44 pontos. Custa nada aqui e evita o furo la na frente.
+//! The body of SKILL.md goes into the index, not just name and description. This
+//! comes from the SkillRouter paper (arXiv 2603.22455): ranking by name+description
+//! alone drops accuracy by 31 to 44 points. It costs nothing here and avoids the
+//! hole down the road.
 
 use crate::texto;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Quantos termos do CORPO entram. O B=0.75 do BM25 ja penaliza documento comprido;
-/// este corte e o segundo cinto, para SKILL.md gigante nao afogar o indice.
+/// How many terms from the BODY get in. BM25's B=0.75 already penalizes long
+/// documents; this cutoff is the second belt, so a giant SKILL.md doesn't flood
+/// the index.
 pub const TERMOS_DO_CORPO: usize = 400;
 
 const PESO_NOME: usize = 3;
@@ -41,8 +43,9 @@ pub struct Indice {
 
 // ---------------------------------------------------------------- frontmatter
 
-/// Le o frontmatter YAML do topo do arquivo. Nao e um parser de YAML e nao quer ser:
-/// aceita `chave: valor`, valor entre aspas, e continuacao indentada na linha seguinte.
+/// Reads the YAML frontmatter at the top of the file. It isn't a YAML parser and
+/// doesn't want to be: it accepts `key: value`, quoted values, and an indented
+/// continuation on the next line.
 pub fn frontmatter(bruto: &str) -> (BTreeMap<String, String>, usize) {
     let mut m = BTreeMap::new();
     let linhas: Vec<&str> = bruto.lines().collect();
@@ -83,7 +86,7 @@ pub fn frontmatter(bruto: &str) -> (BTreeMap<String, String>, usize) {
     (m, fim)
 }
 
-// ------------------------------------------------------------------- varredura
+// ------------------------------------------------------------------- traversal
 
 fn achar_skill_md(raiz: &Path, prof: usize, saida: &mut Vec<PathBuf>) {
     if prof > 4 {
@@ -112,7 +115,8 @@ fn achar_skill_md(raiz: &Path, prof: usize, saida: &mut Vec<PathBuf>) {
     }
 }
 
-/// Pastas onde skill costuma morar. Nao inventa nada: so entra o que existe no disco.
+/// Folders where skills usually live. Doesn't invent anything: only what exists
+/// on disk gets in.
 pub fn pastas_padrao(casa: &Path, cwd: &Path) -> Vec<PathBuf> {
     let mut v = vec![
         casa.join(".claude").join("skills"),
@@ -206,7 +210,7 @@ fn limpar(s: &str) -> String {
     s.replace(['\t', '\n', '\r'], " ").trim().to_string()
 }
 
-// --------------------------------------------------------------- gravar / ler
+// --------------------------------------------------------------- write / read
 
 pub fn gravar(idx: &Indice) -> String {
     let mut s = String::with_capacity(64 * 1024);
@@ -241,9 +245,9 @@ pub fn gravar(idx: &Indice) -> String {
     s
 }
 
-/// Le o indice trazendo SO as postings dos termos pedidos. E o truque do caminho
-/// quente: o arquivo e percorrido uma vez, linha a linha, sem montar estrutura para
-/// os 60 mil termos que a consulta nao usa.
+/// Reads the index bringing back ONLY the postings for the requested terms. This is
+/// the hot-path trick: the file is walked once, line by line, without building a
+/// structure for the 60 thousand terms the query doesn't use.
 pub fn ler_parcial(bruto: &str, termos_query: &[String]) -> Indice {
     let mut idx = Indice::default();
     let quer: std::collections::HashSet<&str> = termos_query.iter().map(|s| s.as_str()).collect();

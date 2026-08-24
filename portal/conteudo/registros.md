@@ -1,60 +1,60 @@
-# registros/ — a corrente
+# registros/ — the hash chain
 
-Esta pasta é o cartório do Batuta. Cada arquivo aqui é um resultado publicado, e
-cada um carrega o hash do anterior. Se alguém — nós inclusive — voltar e mudar um
-número de um registro antigo, todos os registros a partir dali passam a não fechar
-a conta, e qualquer pessoa vê isso em três segundos.
+This folder is Batuta's registry office. Every file here is a published result, and
+each one carries the hash of the previous one. If someone — us included — goes back and
+changes a number in an old record, every record from that point on stops
+balancing the books, and anyone can see it in three seconds.
 
-Não é firula criptográfica. O Batuta só tem um produto, e é credibilidade: um número
-alucinado ou um registro editado em silêncio mata o projeto inteiro. A corrente
-existe para que você não precise acreditar em nós.
+This isn't cryptographic showmanship. Batuta has only one product, and it's credibility: a
+hallucinated number or a silently edited record kills the whole project. The hash chain
+exists so that you don't have to take our word for it.
 
-## O que está aqui
+## What's here
 
 ```
 registros/
-  000001-resultado.json     um elo
-  000002-juiz.json          o próximo
+  000001-resultado.json     one link
+  000002-juiz.json          the next one
   ...
-  TOPO.txt                  o hash do último elo, sozinho, numa linha
-  TOPO.txt.ots              o carimbo de tempo do OpenTimestamps sobre o TOPO.txt
+  TOPO.txt                  the hash of the last link, alone, on one line
+  TOPO.txt.ots              the OpenTimestamps timestamp over TOPO.txt
 ```
 
-Cada arquivo tem esta forma:
+Every file has this shape:
 
 ```json
 {
   "tipo": "resultado",
-  "corpo": { "...": "o conteúdo publicado, incluindo tipo e criado_em" },
-  "hash_anterior": "hash do registro anterior (null no primeiro)",
-  "hash": "sha256 deste elo",
+  "corpo": { "...": "the published content, including tipo and criado_em" },
+  "hash_anterior": "hash of the previous record (null on the first one)",
+  "hash": "sha256 of this link",
   "criado_em": "2026-08-24T02:19:58Z"
 }
 ```
 
-`tipo` e `criado_em` aparecem duas vezes de propósito: fora, para o arquivo ser
-legível de bater o olho; dentro do `corpo`, que é o que está lacrado. Se as duas
-cópias divergirem, a verificação acusa — não dá para adiantar a data de um registro
-sem quebrar o hash.
+`tipo` and `criado_em` appear twice on purpose: outside, so the file is
+readable at a glance; inside `corpo`, which is what's sealed. If the two
+copies diverge, verification flags it — you can't backdate a record's
+date without breaking the hash.
 
-## Como você verifica isto sozinho
+## How you verify this yourself
 
-Sem instalar nada além do Node (a verificação não pode ter dono):
+Without installing anything besides Node (verification can't have an owner):
 
 ```sh
-git clone <repo do batuta> && cd batuta
+git clone <batuta repo> && cd batuta
 node script/cadeia.mjs verificar
 ```
 
-A saída é uma de duas. Ou:
+The output is one of two things. Either:
 
 ```
 corrente inteira: 128 registro(s), nenhum elo quebrado.
 topo: ff50bf42b766207112023550ddbe250fcc51214851134ec9121da90aa0e9703d
 ```
 
-Ou o lugar exato onde quebrou, com o hash declarado, o recalculado e o que fazer
-para descobrir quando mudou:
+Or the exact place where it broke, with the declared hash, the recalculated one, and what to do
+to find out when it changed:
 
 ```
 QUEBROU em 000041-resultado.json (posicao 41 de 128)
@@ -64,71 +64,71 @@ QUEBROU em 000041-resultado.json (posicao 41 de 128)
   compare com o git: git log --follow -p registros/000041-resultado.json
 ```
 
-### Se você não confia no nosso script
+### If you don't trust our script
 
-Justo — é o nosso script. A receita do hash cabe em uma frase e você reimplementa em
-qualquer linguagem em vinte minutos:
+Fair — it's our script. The hash recipe fits in one sentence, and you can reimplement it in
+any language in twenty minutes:
 
-> `hash = sha256( JSON canônico de {"corpo": <o corpo>, "hash_anterior": <hash anterior, ou 64 zeros no primeiro>} )`
+> `hash = sha256( canonical JSON of {"corpo": <the body>, "hash_anterior": <previous hash, or 64 zeros on the first one>} )`
 
-JSON canônico é: chaves de objeto em ordem de code point, nenhum espaço em branco
-entre tokens, inteiro escrito sem casa decimal, não-inteiro arredondado em 6 casas,
-escapes só para `"`, `\`, quebra de linha, retorno, tabulação e controles abaixo de
-0x20 (na forma `\u00XX`). É a mesma regra em três implementações independentes:
-`crates/batuta/src/json.rs` (Rust), `script/cadeia.mjs` (Node) e
-`portal/lib/cadeia.ts` (portal). Elas não se importam umas às outras: se divergirem,
-divergem na sua frente.
+Canonical JSON means: object keys in code point order, no whitespace
+between tokens, integers written without a decimal point, non-integers rounded to 6 decimal places,
+escapes only for `"`, `\`, newline, carriage return, tab, and control characters below
+0x20 (in `\u00XX` form). It's the same rule in three independent implementations:
+`crates/batuta/src/json.rs` (Rust), `script/cadeia.mjs` (Node), and
+`portal/lib/cadeia.ts` (portal). They don't reference one another: if they diverge,
+they diverge right in front of you.
 
-## As três âncoras (e por que são três)
+## The three anchors (and why there are three)
 
-**1. A corrente, aqui.** Prova encadeamento: nenhum registro foi alterado depois de
-ter um sucessor. Sozinha ela tem um buraco óbvio — quem controla a pasta pode
-recalcular a corrente inteira do zero e reescrever a história de ponta a ponta.
+**1. The chain, here.** Proves linkage: no record was altered after
+having a successor. On its own it has an obvious hole — whoever controls the folder can
+recompute the whole chain from scratch and rewrite history end to end.
 
-**2. O histórico do git, público.** Tapa esse buraco. Reescrever a corrente inteira
-exige um `push --force` que aparece no repositório, e não apaga os clones que outras
-pessoas já têm nem os espelhos de quem observa. Por isso a lei do projeto é
-`git commit && git push` no mesmo movimento em que o registro é anexado: registro que
-existe só na máquina de quem gravou não é registro publicado.
+**2. The git history, public.** Plugs that hole. Rewriting the whole chain
+requires a `push --force` that shows up in the repository, and it doesn't erase the clones other
+people already have, nor the mirrors kept by anyone watching. That's why the project rule is
+`git commit && git push` in the same motion as appending the record: a record that
+exists only on the machine that recorded it is not a published record.
 
-**3. O OpenTimestamps, fora do nosso alcance.** Tapa o buraco que sobra: as datas.
-Git é fácil de forjar em data (`GIT_AUTHOR_DATE` faz o que você mandar). O
-OpenTimestamps carimba o `TOPO.txt` na rede Bitcoin, de graça, e nem nós conseguimos
-mover essa data depois. É a diferença entre "eles dizem que mediram em agosto" e
-"este hash provadamente existia em agosto".
+**3. OpenTimestamps, beyond our reach.** Plugs the remaining hole: the dates.
+Git is easy to forge on dates (`GIT_AUTHOR_DATE` does whatever you tell it). 
+OpenTimestamps stamps `TOPO.txt` on the Bitcoin network, for free, and not even we
+can move that date afterward. It's the difference between "they say they measured in August" and
+"this hash provably existed in August."
 
 ```sh
-node script/cadeia.mjs ots        # imprime os comandos e o que o carimbo prova
-ots verify registros/TOPO.txt.ots # confere o carimbo você mesmo
+node script/cadeia.mjs ots        # prints the commands and what the stamp proves
+ots verify registros/TOPO.txt.ots # check the stamp yourself
 ```
 
-## O que a corrente NÃO prova
+## What the chain does NOT prove
 
-Isto aqui importa mais que tudo que está acima, e está escrito aqui para que ninguém
-possa dizer depois que a gente insinuou o contrário:
+This matters more than everything above, and it's written here so no one
+can later say we implied otherwise:
 
-- **Não prova que o número está certo.** Prova que ele não foi editado depois de
-  publicado. Um erro de método, uma tarefa mal escrita, um juiz enviesado — tudo isso
-  entra na corrente e fica lá, lacrado, errado e imutável. Contra isso valem outras
-  coisas: bateria congelada, holdout, juiz cego e versionado, e o cru publicado junto
-  para você refazer a conta.
-- **Não prova que a medição aconteceu como descrito.** Prova que a descrição não mudou.
-- **Não prova que não existe gaveta.** Prova o que foi carimbado; não diz nada sobre
-  um resultado ruim que nunca tenha sido anexado. O antídoto para isso não é
-  criptografia, é o protocolo: rodada declarada antes de rodar, e resultado ruim
-  publicado igual.
-- **Não impede um erro de ser corrigido.** Impede que ele seja corrigido em silêncio.
-  Correção é registro novo, do tipo `correcao`, apontando para o hash do errado. Os
-  dois ficam visíveis para sempre — era esse o combinado.
+- **It does not prove the number is correct.** It proves it wasn't edited after
+  publication. A methodological error, a badly written task, a biased judge — all of that
+  enters the chain and stays there, sealed, wrong, and immutable. What counters that is other
+  things: a frozen battery, holdout, a blind and versioned judge, and the raw data published alongside
+  so you can redo the math.
+- **It does not prove the measurement happened as described.** It proves the description didn't change.
+- **It does not prove there's no drawer full of hidden results.** It proves what was stamped; it says nothing about
+  a bad result that was never appended. The antidote for that isn't
+  cryptography, it's the protocol: a round declared before it runs, and a bad result
+  published just the same.
+- **It does not prevent an error from being corrected.** It prevents it from being corrected silently.
+  A correction is a new record, of type `correcao`, pointing at the hash of the wrong one. Both
+  stay visible forever — that was the deal.
 
-## Anexar um registro
+## Appending a record
 
 ```sh
 node script/cadeia.mjs anexar caminho/do/resultado.json
 git add registros/ && git commit -m "registro 000129-resultado" && git push
-node script/cadeia.mjs ots     # e carimbe o novo topo
+node script/cadeia.mjs ots     # and stamp the new top
 ```
 
-A corrente só anda para frente. Não existe editar, não existe apagar, e o banco de
-dados do portal também recusa os dois (`sql/002_cadeia.sql`) — mas o banco é cópia de
-leitura. A verdade é esta pasta, o git e o carimbo.
+The chain only moves forward. There is no editing, there is no deleting, and the portal's
+database refuses both too (`sql/002_cadeia.sql`) — but the database is a read
+copy. The source of truth is this folder, git, and the timestamp.

@@ -1,13 +1,13 @@
-//! BATUTA — camada aberta de medicao de Agent Skills.
+//! BATUTA — open measurement layer for Agent Skills.
 //!
-//! Esta biblioteca e o CONTRATO. O binario e uma casca fina em cima dela, e a
-//! bateria em `tests/conformidade.rs` testa daqui. Qualquer porte para outra
-//! linguagem esta conforme quando passa a mesma bateria com os mesmos numeros.
+//! This library is the CONTRACT. The binary is a thin shell on top of it, and
+//! the test suite in `tests/conformidade.rs` tests from here. Any port to another
+//! language is conformant when it passes the same test suite with the same numbers.
 //!
-//! Leis do caminho quente, todas verificaveis na bateria:
-//!   - zero rede, zero LLM, zero espera
-//!   - o texto do prompt nunca e gravado nem transmitido
-//!   - falso positivo custa mais que falso negativo: na duvida, silencio
+//! Laws of the hot path, all verifiable in the test suite:
+//!   - zero network, zero LLM, zero waiting
+//!   - the prompt text is never recorded nor transmitted
+//!   - a false positive costs more than a false negative: when in doubt, stay silent
 
 pub mod achar;
 pub mod bm25;

@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 /**
- * BATUTA — a corrente de hash dos resultados publicados (§8).
+ * BATUTA — the hash chain of published results (§8).
  *
  *   node script/cadeia.mjs anexar <arquivo.json>
  *   node script/cadeia.mjs verificar
  *   node script/cadeia.mjs ots
  *
- * Node puro, zero dependência, e é para continuar assim: este é o programa que uma
- * pessoa desconfiada roda para conferir os números do Batuta sem confiar no Batuta.
- * Se para verificar fosse preciso `npm install`, a verificação teria dono — e a
- * única coisa que este projeto tem é não ter dono do número (§14.1).
+ * Pure Node, zero dependency, and it's meant to stay that way: this is the program
+ * a distrustful person runs to check Batuta's numbers without trusting Batuta. If
+ * verifying required `npm install`, verification would have an owner — and the one
+ * thing this project has is no owner of the number (§14.1).
  *
- * O hash canônico abaixo é uma cópia deliberada de `json::escrever`
- * (crates/batuta/src/json.rs) e de portal/lib/cadeia.ts. Três cópias, de propósito:
- * nenhuma das três pode depender das outras para rodar. Se você mexer em uma, mexa
- * nas três — e confira com um registro real antes de commitar.
+ * The canonical hash below is a deliberate copy of `json::escrever`
+ * (crates/batuta/src/json.rs) and of portal/lib/cadeia.ts. Three copies, on
+ * purpose: none of the three can depend on the others to run. If you touch one,
+ * touch all three — and check against a real record before committing.
  */
 
 import { createHash } from "node:crypto";
@@ -27,10 +27,10 @@ const DIR = path.join(RAIZ, "registros");
 const TOPO = path.join(DIR, "TOPO.txt");
 const GENESIS = "0".repeat(64);
 
-// =========================================================== JSON canônico
+// =========================================================== canonical JSON
 
-/** Ordem por code point — o BTreeMap<String> do Rust ordena pelos bytes do UTF-8,
- *  e o sort() padrão do JS ordena por unidade UTF-16, que diverge fora do BMP. */
+/** Order by code point — Rust's BTreeMap<String> sorts by UTF-8 bytes,
+ *  and JS's default sort() sorts by UTF-16 unit, which diverges outside the BMP. */
 function compararChaves(a, b) {
   const ca = Array.from(a);
   const cb = Array.from(b);
@@ -43,9 +43,9 @@ function compararChaves(a, b) {
   return ca.length - cb.length;
 }
 
-/** Espelho de json::escapar. Backspace e form feed saem pelo caminho genérico
- *  como \u0008 e \u000c, igual ao Rust — é exatamente onde o JSON.stringify divergiria,
- *  porque ele usaria as formas curtas. */
+/** Mirror of json::escapar. Backspace and form feed go through the generic path
+ *  as \u0008 and \u000c, same as Rust — this is exactly where JSON.stringify would
+ *  diverge, because it would use the short forms. */
 function escapar(s) {
   let o = '"';
   for (const c of s) {
@@ -61,8 +61,8 @@ function escapar(s) {
   return o + '"';
 }
 
-/** Inteiro sai inteiro; o resto arredonda em 6 casas, desempatando para longe do
- *  zero como o f64::round do Rust (o Math.round desempata para cima). */
+/** An integer stays an integer; the rest rounds to 6 places, breaking ties away
+ *  from zero like Rust's f64::round (Math.round breaks ties upward). */
 function numero(n) {
   if (!Number.isFinite(n)) throw new Error(`numero nao serializavel: ${n}`);
   if (Number.isInteger(n) && Math.abs(n) < 1e15) return String(n === 0 ? 0 : n);
@@ -89,12 +89,12 @@ export function canonico(v) {
 
 const sha256 = (s) => createHash("sha256").update(s, "utf8").digest("hex");
 
-/** O elo: sha256 do JSON canônico de {corpo, hash_anterior}. */
+/** The link: sha256 of the canonical JSON of {corpo, hash_anterior}. */
 export function proximoHash(hashAnterior, corpo) {
   return sha256(canonico({ corpo, hash_anterior: hashAnterior ?? GENESIS }));
 }
 
-// ============================================================ leitura da pasta
+// ============================================================ folder reading
 
 function listar() {
   if (!fs.existsSync(DIR)) return [];
@@ -117,7 +117,7 @@ function ler(nome) {
   }
 }
 
-// ====================================================================== anexar
+// ====================================================================== append
 
 function anexar(arquivo) {
   if (!arquivo) {
@@ -141,8 +141,8 @@ function anexar(arquivo) {
     return 2;
   }
 
-  // O tipo vem do próprio corpo, ou do nome do arquivo. Ele vira parte do nome do
-  // registro para a pasta ser legível sem abrir nada.
+  // The type comes from the body itself, or from the file name. It becomes part
+  // of the record's name so the folder is readable without opening anything.
   const tipoBruto =
     typeof corpo.tipo === "string" && corpo.tipo.trim()
       ? corpo.tipo.trim()
@@ -153,9 +153,9 @@ function anexar(arquivo) {
     return 2;
   }
 
-  // tipo e criado_em vivem DENTRO do corpo — logo, dentro do lacre. O arquivo
-  // repete os dois no nível de cima só para ser legível de bater o olho; se
-  // alguém editar a cópia de fora, `verificar` acusa a divergência.
+  // tipo and criado_em live INSIDE the body — that is, inside the seal. The file
+  // repeats both at the top level only for at-a-glance readability; if
+  // someone edits the outer copy, `verificar` flags the divergence.
   const criado_em =
     typeof corpo.criado_em === "string" && corpo.criado_em
       ? corpo.criado_em
@@ -176,8 +176,9 @@ function anexar(arquivo) {
 
   const registro = { tipo, corpo, hash_anterior, hash, criado_em };
   fs.mkdirSync(DIR, { recursive: true });
-  // Gravado indentado, e isso é seguro: o hash é do JSON CANÔNICO do corpo, não dos
-  // bytes do arquivo. Arquivo legível dá diff legível no git, que é a segunda âncora.
+  // Written indented, and that's safe: the hash is of the CANONICAL JSON of the
+  // body, not of the file's bytes. A readable file gives a readable diff in git,
+  // which is the second anchor.
   fs.writeFileSync(path.join(DIR, nome), JSON.stringify(registro, null, 2) + "\n", "utf8");
   fs.writeFileSync(TOPO, hash + "\n", "utf8");
 
@@ -192,7 +193,7 @@ function anexar(arquivo) {
   return 0;
 }
 
-// =================================================================== verificar
+// =================================================================== verify
 
 function verificar() {
   const arquivos = listar();
@@ -258,7 +259,7 @@ function verificar() {
       return 1;
     }
 
-    // as cópias de fora do lacre têm que bater com as de dentro
+    // the copies outside the seal have to match the ones inside
     if (r.tipo !== r.corpo?.tipo || (r.criado_em ?? null) !== (r.corpo?.criado_em ?? null)) {
       console.error(`QUEBROU em ${posicao}`);
       console.error("  o cabecalho do arquivo nao bate com o corpo lacrado:");
@@ -337,9 +338,9 @@ novo do tipo "correcao" apontando para o hash do errado — o erro fica visivel.
   return 0;
 }
 
-// So roda como programa. Sem esta guarda, importar `canonico`/`proximoHash` daqui
-// (o teste de compatibilidade com o Rust faz isso) executaria o main e mataria o
-// processo de quem importou.
+// Only runs as a program. Without this guard, importing `canonico`/`proximoHash`
+// from here (the Rust compatibility test does this) would execute main and kill
+// the process of whoever imported it.
 const executando =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (executando) {

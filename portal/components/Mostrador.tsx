@@ -1,10 +1,10 @@
 /**
- * O mostrador da chamada — o relatório local do jeito que ele sai no terminal.
+ * The hero display — the local report the way it comes out in the terminal.
  *
- * É EXEMPLO, e a legenda diz isso na cara. A lei 11 do projeto ("número medido, não
- * estimado") vale para o próprio site: nenhum número desta caixa é apresentado como
- * resultado publicado. O que ela mostra é a FORMA do relatório — o funil, a skill
- * fantasma, o custo por tarefa concluída —, que é o argumento da página.
+ * It's an EXAMPLE, and the caption says so plainly. Project law 11 ("measured
+ * number, not estimated") applies to the site itself: no number in this box is
+ * presented as a published result. What it shows is the SHAPE of the report — the
+ * funnel, the ghost skill, the cost per completed task — which is the page's argument.
  */
 export function Mostrador() {
   return (

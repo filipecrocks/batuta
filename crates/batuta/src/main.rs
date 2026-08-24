@@ -1,6 +1,6 @@
-//! BATUTA — camada aberta de medicao de Agent Skills.
-//! Este binario e o CAMINHO QUENTE: roteia e registra, local, em milissegundos.
-//! Ele nao acessa a rede. Nunca. Se um comando precisar de rede, ele nao mora aqui.
+//! BATUTA — open measurement layer for Agent Skills.
+//! This binary is the HOT PATH: it routes and logs, locally, in milliseconds.
+//! It does not access the network. Ever. If a command needs the network, it doesn't live here.
 
 use batuta::json::{self, num, obj, txt, Valor};
 use batuta::{achar, casa, conflitos, data, indice, registro, rota, VERSAO};
@@ -69,7 +69,7 @@ diario agregado por skill — nunca evento cru, nunca o texto do seu prompt.
     )
 }
 
-// ------------------------------------------------------------------ utilitario
+// ------------------------------------------------------------------ utility
 
 fn opt(args: &[String], nome: &str) -> Option<String> {
     let mut i = 0;
@@ -97,7 +97,7 @@ fn posicional(args: &[String]) -> Option<String> {
     while i < args.len() {
         let a = &args[i];
         if a.starts_with("--") {
-            // flags com valor consomem o proximo
+            // flags with a value consume the next one
             if !a.contains('=')
                 && matches!(
                     a.as_str(),
@@ -134,7 +134,7 @@ fn ler_stdin() -> String {
     s
 }
 
-// -------------------------------------------------------------------- comandos
+// -------------------------------------------------------------------- commands
 
 fn cmd_index(args: &[String]) -> i32 {
     let mut pastas: Vec<std::path::PathBuf> = Vec::new();
@@ -198,7 +198,7 @@ fn cmd_route(args: &[String]) -> i32 {
                     p
                 }
             }
-            // entrada quebrada nao pode derrubar o turno do usuario
+            // broken input must not bring down the user's turn
             Err(_) => String::new(),
         }
     } else if tem(args, "--stdin") {

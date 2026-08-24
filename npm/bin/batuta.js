@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
-// Wrapper burro de proposito: a inteligencia toda e do binario.
-// Unica excecao: `batuta registro`, que precisa de rede — e rede nao mora no binario.
+// Deliberately dumb wrapper: all the intelligence lives in the binary.
+// Only exception: `batuta registro`, which needs the network — and the network doesn't live in the binary.
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");

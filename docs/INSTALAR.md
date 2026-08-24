@@ -1,20 +1,20 @@
-# Instalar o Batuta
+# Install Batuta
 
-Três caminhos. Escolha um.
+Three paths. Pick one.
 
-## 1. curl (o mais curto)
+## 1. curl (the shortest)
 
 ```sh
 curl -fsSL https://batuta.space/instalar.sh | sh
 ```
 
-Fixar a versão: `BATUTA_VERSAO=v0.1.0 curl -fsSL https://batuta.space/instalar.sh | sh`
-Escolher a pasta: `BATUTA_DESTINO=/opt/bin curl -fsSL ... | sh`
+Pin the version: `BATUTA_VERSAO=v0.1.0 curl -fsSL https://batuta.space/instalar.sh | sh`
+Choose the folder: `BATUTA_DESTINO=/opt/bin curl -fsSL ... | sh`
 
-**Deixa onde:** `/usr/local/bin/batuta` se você tiver permissão, senão `$HOME/.local/bin/batuta`.
-Um arquivo só. O script confere o SHA256 contra o `SHA256SUMS` da release — se não bater, ele apaga o download e não instala nada.
+**Lands at:** `/usr/local/bin/batuta` if you have permission, otherwise `$HOME/.local/bin/batuta`.
+A single file. The script checks the SHA256 against the release's `SHA256SUMS` — if it doesn't match, it deletes the download and installs nothing.
 
-Linux e macOS, x86_64 e aarch64. No Windows, use o npm.
+Linux and macOS, x86_64 and aarch64. On Windows, use npm.
 
 ## 2. npm
 
@@ -22,54 +22,54 @@ Linux e macOS, x86_64 e aarch64. No Windows, use o npm.
 npm install -g batuta
 ```
 
-**Deixa onde:** o binário em `<prefixo-do-npm>/lib/node_modules/batuta/vendor/batuta` (`.exe` no Windows) e um atalho `batuta` no bin do npm. O `postinstall` baixa da release da mesma versão do pacote e confere o SHA256 — falhou, o install falha junto.
+**Lands at:** the binary at `<npm-prefix>/lib/node_modules/batuta/vendor/batuta` (`.exe` on Windows) and a `batuta` shortcut in npm's bin. `postinstall` downloads from the release matching the package's version and checks the SHA256 — if that fails, the install fails too.
 
-Este é o único caminho que tem `batuta registro atualizar`, que baixa o registro público de skills. Ele mora no wrapper JS porque **o binário Rust não acessa a rede, por lei do projeto**.
+This is the only path that has `batuta registro atualizar`, which downloads the public skills registry. It lives in the JS wrapper because **the Rust binary doesn't touch the network, by project rule**.
 
-## 3. cargo (compilando na sua máquina)
+## 3. cargo (building on your machine)
 
 ```sh
 git clone https://github.com/filipecrocks/batuta
 cargo install --path batuta/crates/batuta
 ```
 
-**Deixa onde:** `$HOME/.cargo/bin/batuta`. Sem download de binário, sem SHA para conferir — você compilou o que leu.
+**Lands at:** `$HOME/.cargo/bin/batuta`. No binary download, no SHA to check — you compiled what you read.
 
-## Conferir que funcionou
+## Verify it worked
 
 ```sh
 batuta version      # batuta 0.1.0
-batuta index        # deve dizer quantas skills achou
-batuta report       # o número, 100% offline
+batuta index        # should say how many skills it found
+batuta report       # the number, 100% offline
 ```
 
-Se `batuta: command not found`, a pasta não está no `PATH`:
+If `batuta: command not found`, the folder isn't on your `PATH`:
 
 ```sh
-export PATH="$HOME/.local/bin:$PATH"   # ou $HOME/.cargo/bin
+export PATH="$HOME/.local/bin:$PATH"   # or $HOME/.cargo/bin
 ```
 
-## Os 3 próximos passos
+## The next 3 steps
 
 ```sh
-batuta index           # varre suas skills e monta o índice local
-batuta install-hooks   # instala o hook UserPromptSubmit
-batuta report          # funil, skill fantasma, custo por tarefa, lift
+batuta index           # scans your skills and builds the local index
+batuta install-hooks   # installs the UserPromptSubmit hook
+batuta report          # funnel, ghost skill, cost per task, lift
 ```
 
-## Desinstalar
+## Uninstall
 
-| Como instalou | Como sai |
+| How you installed | How you leave |
 |---|---|
 | curl | `rm $(command -v batuta)` |
 | npm | `npm uninstall -g batuta` |
 | cargo | `cargo uninstall batuta` |
 
-E os dados, que são só seus e nunca saíram daqui:
+And the data, which is yours alone and never left here:
 
 ```sh
 rm -rf ~/.batuta
 ```
 
-Isso apaga índice, eventos, config e o sal. Antes de apagar, `batuta privacidade` mostra exatamente o que tem lá dentro.
-Se você instalou o hook, tire o bloco `UserPromptSubmit` do seu `~/.claude/settings.json` também.
+This deletes the index, events, config, and the salt. Before deleting, `batuta privacidade` shows you exactly what's in there.
+If you installed the hook, also remove the `UserPromptSubmit` block from your `~/.claude/settings.json`.

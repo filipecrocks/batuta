@@ -1,20 +1,21 @@
-//! `batuta conflicts` — skills que competem pelo mesmo turno.
+//! `batuta conflicts` — skills that compete for the same turn.
 //!
-//! A ideia de agrupar skills parecidas e sugerir desambiguacao vem do SkillPilot
-//! (RealTapeL/SkillPilot, licenca MIT). A implementacao aqui e propria — cosseno
-//! sobre tf-idf do indice que ja existe — mas o credito da ideia e deles.
+//! The idea of grouping similar skills and suggesting disambiguation comes from
+//! SkillPilot (RealTapeL/SkillPilot, MIT license). The implementation here is our
+//! own — cosine similarity over tf-idf from the index that already exists — but
+//! credit for the idea goes to them.
 //!
-//! Por que importa: duas skills que dizem quase a mesma coisa fazem o roteador
-//! oscilar entre elas sem motivo, e o dado de disparo de cada uma fica sujo. E
-//! caminho frio: pode demorar.
+//! Why it matters: two skills that say almost the same thing make the router
+//! oscillate between them for no reason, and each one's trigger data gets dirty.
+//! This is a cold path: it can take a while.
 
 use crate::bm25::idf;
 use crate::indice::Indice;
 use std::collections::BTreeMap;
 
-/// Acima disto o par entra no relatorio. Calibrado para pegar sobreposicao real
-/// sem encher a tela: skills do mesmo dominio ficam em 0.3-0.5; quase-duplicatas
-/// passam de 0.6.
+/// Above this, the pair enters the report. Calibrated to catch real overlap
+/// without flooding the screen: skills in the same domain sit at 0.3-0.5;
+/// near-duplicates go above 0.6.
 pub const LIMIAR: f64 = 0.55;
 
 pub fn relatorio(idx: &Indice) -> String {
@@ -23,7 +24,7 @@ pub fn relatorio(idx: &Indice) -> String {
         return "batuta conflicts: menos de duas skills indexadas, nada a comparar.\n".to_string();
     }
 
-    // vetor tf-idf esparso por skill
+    // sparse tf-idf vector per skill
     let mut vetores: Vec<BTreeMap<&str, f64>> = vec![BTreeMap::new(); n];
     for (termo, lista) in &idx.postings {
         let peso = idf(n, lista.len());

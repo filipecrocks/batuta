@@ -1,20 +1,20 @@
 /**
- * Markdown → HTML, sem dependência.
+ * Markdown → HTML, no dependency.
  *
- * O portal tem UMA dependência npm (`@neondatabase/serverless`) e a ideia é que
- * continue assim. Um renderizador de markdown de 150 linhas que cobre exatamente o
- * que os nossos documentos usam é mais barato de auditar que uma árvore de pacotes —
- * e num projeto cujo produto é credibilidade, auditar barato importa.
+ * The portal has ONE npm dependency (`@neondatabase/serverless`) and the idea is
+ * for it to stay that way. A 150-line markdown renderer that covers exactly what
+ * our documents use is cheaper to audit than a package tree — and in a project
+ * whose product is credibility, cheap auditing matters.
  *
- * Cobre: título, parágrafo, negrito, itálico, código inline, bloco de código, lista
- * ordenada e não ordenada, citação, régua, link e tabela GFM.
- * Não cobre: HTML embutido — que é justamente o que a gente NÃO quer aceitar.
+ * Covers: heading, paragraph, bold, italic, inline code, code block, ordered and
+ * unordered list, blockquote, horizontal rule, link, and GFM table.
+ * Does not cover: embedded HTML — which is exactly what we do NOT want to accept.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** Marca de posição para o código inline. Caractere de uso privado do Unicode: não
- *  aparece em texto de gente, então não há como o conteúdo forjar uma marca. */
+/** Placeholder marker for inline code. Unicode private-use character: it doesn't
+ *  show up in human text, so there's no way for content to forge a marker. */
 const MARCA = "";
 
 function escapar(s: string): string {
@@ -25,8 +25,8 @@ function escapar(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Trechos de uma linha. Código inline sai primeiro, para que nada seja
- *  interpretado dentro dele. */
+/** Fragments of a line. Inline code goes first, so nothing gets
+ *  interpreted inside it. */
 function inline(s: string): string {
   const codigos: string[] = [];
   let t = s.replace(/`([^`]+)`/g, (_m, c: string) => {
@@ -73,7 +73,7 @@ export function markdown(fonte: string): string {
   while (i < linhas.length) {
     const l = linhas[i];
 
-    // bloco de código
+    // code block
     if (l.startsWith("```")) {
       const lingua = l.slice(3).trim();
       const corpo: string[] = [];
@@ -85,14 +85,14 @@ export function markdown(fonte: string): string {
       continue;
     }
 
-    // régua
+    // horizontal rule
     if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(l)) {
       saida.push("<hr />");
       i++;
       continue;
     }
 
-    // título
+    // heading
     const t = l.match(/^(#{1,6})\s+(.*)$/);
     if (t) {
       const n = t[1].length;
@@ -102,7 +102,7 @@ export function markdown(fonte: string): string {
       continue;
     }
 
-    // tabela GFM
+    // GFM table
     if (
       l.includes("|") &&
       i + 1 < linhas.length &&
@@ -125,7 +125,7 @@ export function markdown(fonte: string): string {
       continue;
     }
 
-    // citação
+    // blockquote
     if (l.startsWith(">")) {
       const corpo: string[] = [];
       while (i < linhas.length && linhas[i].startsWith(">")) {
@@ -136,10 +136,10 @@ export function markdown(fonte: string): string {
       continue;
     }
 
-    // listas. A continuação importa: item de lista que passa de 80 colunas quebra em
-    // duas linhas no arquivo, e sem absorver a segunda o fim da frase vira parágrafo
-    // solto depois da lista. Foi assim que "…sem ela o corte de ruído vira
-    // decoração)." apareceu sozinho embaixo de uma lista.
+    // lists. The continuation matters: a list item that runs past 80 columns wraps
+    // into two lines in the file, and without absorbing the second one, the end of
+    // the sentence turns into a loose paragraph after the list. That's how "…sem ela
+    // o corte de ruído vira decoração)." ended up alone below a list.
     const ITEM_UL = /^\s*[-*+]\s+/;
     const ITEM_OL = /^\s*\d+[.)]\s+/;
 
@@ -171,7 +171,7 @@ export function markdown(fonte: string): string {
       continue;
     }
 
-    // parágrafo
+    // paragraph
     if (l.trim() === "") {
       i++;
       continue;
@@ -196,7 +196,7 @@ export function markdown(fonte: string): string {
   return saida.join("\n");
 }
 
-/** Lê um documento de `portal/conteudo/`, populado por `script/sincronizar-conteudo.mjs`. */
+/** Reads a document from `portal/conteudo/`, populated by `script/sincronizar-conteudo.mjs`. */
 export function documento(nome: string): string {
   try {
     return readFileSync(join(process.cwd(), "conteudo", nome), "utf8");

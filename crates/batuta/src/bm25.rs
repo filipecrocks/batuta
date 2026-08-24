@@ -1,21 +1,21 @@
-//! BM25. Parametros congelados no SPEC — mexer neles sem mexer na bateria de
-//! conformidade e mudar a regua no meio da serie historica.
+//! BM25. Parameters frozen in the SPEC — changing them without changing the
+//! conformance suite means moving the ruler mid-way through the historical series.
 
 use crate::indice::Indice;
 
 pub const K1: f64 = 1.5;
 pub const B: f64 = 0.75;
 
-/// Abaixo disto o roteador se cala. Falso positivo custa mais que falso negativo:
-/// skill sugerida a toa entra no contexto, gasta token e ensina o modelo a ignorar
-/// a sugestao. O valor 2.0 vem do v0.1 — com 3.2 o roteador ficava mudo em 3 de 7
-/// casos legitimos.
+/// Below this the router stays silent. A false positive costs more than a false
+/// negative: a skill suggested for no reason enters the context, spends tokens and
+/// teaches the model to ignore the suggestion. The value 2.0 comes from v0.1 — at
+/// 3.2 the router went mute in 3 of 7 legitimate cases.
 pub const CORTE_RUIDO: f64 = 2.0;
 
-/// Quantas skills no maximo saem numa rota.
+/// Maximum number of skills that come out of a route.
 pub const MAX_SUGESTOES: usize = 3;
 
-/// Quem nao chega a esta fracao da primeira colocada nao acompanha.
+/// Whoever doesn't reach this fraction of the top scorer doesn't make the cut.
 pub const FRACAO_DO_TOPO: f64 = 0.55;
 
 #[derive(Debug, Clone)]
@@ -30,8 +30,8 @@ pub fn idf(n: usize, df: usize) -> f64 {
     (1.0 + (n - df + 0.5) / (df + 0.5)).ln()
 }
 
-/// Pontua todas as skills contra os termos da consulta e devolve a lista ja podada
-/// pelo corte de ruido, pelo teto de sugestoes e pela fracao do topo.
+/// Scores all skills against the query terms and returns the list already pruned
+/// by the noise cutoff, the suggestion cap, and the top-score fraction.
 pub fn pontuar(idx: &Indice, termos: &[String]) -> Vec<Acerto> {
     let n = idx.skills.len();
     if n == 0 || termos.is_empty() {
@@ -42,7 +42,7 @@ pub fn pontuar(idx: &Indice, termos: &[String]) -> Vec<Acerto> {
     let mut vistos: Vec<&str> = Vec::with_capacity(termos.len());
 
     for t in termos {
-        // termo repetido na consulta conta uma vez so
+        // repeated term in the query counts only once
         if vistos.contains(&t.as_str()) {
             continue;
         }
@@ -77,7 +77,7 @@ pub fn pontuar(idx: &Indice, termos: &[String]) -> Vec<Acerto> {
         })
         .collect();
 
-    // ordem estavel e deterministica: nota desc, depois indice asc
+    // stable and deterministic order: score desc, then index asc
     acertos.sort_by(|a, b| {
         b.nota
             .partial_cmp(&a.nota)

@@ -1,197 +1,203 @@
-# SPEC — o contrato do caminho quente
+# SPEC — the hot-path contract
 
-Este documento e `crates/batuta/tests/conformidade.rs` são **o contrato**. Um porte
-para outra linguagem está conforme quando passa a bateria com os mesmos números —
-não com números parecidos.
+This document and `crates/batuta/tests/conformidade.rs` are **the contract**. A port
+to another language is conformant when it passes the battery with the exact same
+numbers — not with similar numbers.
 
-Versão do contrato: **1** · congelado em 24/08/2026.
+Contract version: **1** · frozen on 08/24/2026.
 
 ---
 
-## 1. A fronteira
+## 1. The boundary
 
-**O binário só faz o que precisa ser determinístico, local e em milissegundos. Todo o
-resto é skill — e como skill, é medido.**
+**The binary only does what needs to be deterministic, local, and in milliseconds.
+Everything else is a skill — and like any skill, it gets measured.**
 
-| | caminho quente | caminho frio |
+| | hot path | cold path |
 |---|---|---|
-| comandos | `route`, `log`, `index` | `report`, `resumo`, `find`, `conflicts` |
-| rede | **proibida** | permitida (mas não no binário — ver §7) |
-| LLM | **proibido** | permitido |
-| orçamento | 100ms, teto duro 300ms | sem orçamento |
+| commands | `route`, `log`, `index` | `report`, `resumo`, `find`, `conflicts` |
+| network | **forbidden** | allowed (but not in the binary — see §7) |
+| LLM | **forbidden** | allowed |
+| budget | 100ms, hard ceiling 300ms | no budget |
 
-Decompor tarefa em blocos, formatar entrega, reescrever prompt — nada disso entra no
-binário. Viram skills candidatas e passam pelo teste como qualquer outra.
+Breaking a task into blocks, formatting the delivery, rewriting the prompt — none of
+that goes into the binary. It becomes a candidate skill and goes through testing
+like any other.
 
-## 2. Tokenização
+## 2. Tokenization
 
-Um único caminho para indexar e para consultar. Se as duas pontas divergirem, o
-roteador mente.
+A single path for both indexing and querying. If the two ends diverge, the router
+lies.
 
-1. Dobra para minúscula e **remove acento** (á→a, ç→c, ñ→n, …).
-2. Quebra em qualquer caractere não alfanumérico.
-3. Descarta token com menos de 2 caracteres.
-4. Descarta **palavra-cola** (lista fixa pt+en no código; sem ela o corte de ruído vira
-   decoração).
-5. Descarta token só de dígitos.
-6. Para token com **mais de 5** caracteres, emite também o **prefixo de 5**.
+1. Lowercases and **strips accents** (á→a, ç→c, ñ→n, …).
+2. Splits on any non-alphanumeric character.
+3. Discards tokens under 2 characters.
+4. Discards **glue words** (a fixed pt+en list in the code; without it, noise-cutting
+   becomes decoration).
+5. Discards digit-only tokens.
+6. For tokens **longer than 5** characters, also emits the **5-character prefix**.
 
-O passo 6 substitui o stemmer. "quebrou" e "quebrado" se encontram em "quebr", e o
-custo é uma fatia de string em vez de tabela de sufixos no caminho quente. Palavra de
-5 caracteres ou menos **não** ganha prefixo — senão "casa" e "caso" viram a mesma
-coisa.
+Step 6 replaces the stemmer. "quebrou" and "quebrado" (broke / broken) meet at
+"quebr", and the cost is a string slice instead of a suffix table on the hot path.
+Words of 5 characters or fewer **do not** get a prefix — otherwise "casa" (house)
+and "caso" (case) would become the same thing.
 
-## 3. Indexação
+## 3. Indexing
 
-Um documento por `SKILL.md` encontrado. O saco de palavras é:
+One document per `SKILL.md` found. The bag of words is:
 
 ```
-nome + nome-da-pasta   × 3
-descrição              × 2
-corpo (400 termos)     × 1
+name + folder-name    × 3
+description            × 2
+body (400 terms)       × 1
 ```
 
-O corpo entra por causa do paper **SkillRouter** (arXiv 2603.22455): rankear só por
-nome + descrição derruba a acurácia de roteamento em **31 a 44 pontos percentuais**
-num benchmark de ~80 mil skills sobrepostas. No caminho quente local (10 a 100
-skills) a diferença provavelmente some; em `batuta find`, sobre registro público,
-muda tudo. Custa nada indexar os dois lados igual, e evita o furo lá na frente.
+The body is included because of the **SkillRouter** paper (arXiv 2603.22455):
+ranking by name + description alone drops routing accuracy by **31 to 44 percentage
+points** on a benchmark of ~80,000 overlapping skills. On the local hot path (10 to
+100 skills) the difference probably disappears; in `batuta find`, over the public
+registry, it changes everything. Indexing both sides the same way costs nothing,
+and it avoids the gap down the road.
 
-O corte de 400 termos do corpo é o segundo cinto: o `B=0.75` do BM25 já penaliza
-documento comprido.
+The 400-term cap on the body is the second safety belt: BM25's `B=0.75` already
+penalizes long documents.
 
-### Formato do índice — `~/.batuta/indice.txt`
+### Index format — `~/.batuta/indice.txt`
 
-Uma linha por registro, não JSON. Motivo medido: o caminho quente tem 100ms de
-orçamento **inteiro**, e só as linhas `P` dos termos da consulta precisam ser
-abertas. JSON obrigaria a parsear o arquivo todo.
+One line per record, not JSON. Measured reason: the hot path has a **full** 100ms
+budget, and only the `P` lines for the query's terms need to be opened. JSON would
+force parsing the whole file.
 
 ```
 BATUTA-INDICE 1
-G <epoch de geração>
-N <número de skills>
-A <tamanho médio dos documentos>
-S <i>\t<nome>\t<versão>\t<descrição>\t<caminho>\t<origem>\t<tam>
-P <termo>\t<i>:<tf>,<i>:<tf>,...
+G <generation epoch>
+N <number of skills>
+A <average document length>
+S <i>\t<name>\t<version>\t<description>\t<path>\t<origin>\t<size>
+P <term>\t<i>:<tf>,<i>:<tf>,...
 ```
 
-`df` de um termo = número de pares na sua linha `P`.
+A term's `df` = the number of pairs on its `P` line.
 
-## 4. Pontuação — BM25
+## 4. Scoring — BM25
 
 ```
 idf(t)   = ln(1 + (N - df + 0.5) / (df + 0.5))
 score(d) = Σ_t idf(t) · (tf · (K1+1)) / (tf + K1 · (1 - B + B · |d|/avgdl))
 ```
 
-| parâmetro | valor | por quê |
+| parameter | value | why |
 |---|---|---|
-| `K1` | **1.5** | padrão; validado no v0.1 |
-| `B` | **0.75** | padrão; penaliza documento comprido |
-| `CORTE_RUIDO` | **2.0** | com 3.2 o roteador ficava mudo em 3 de 7 casos legítimos |
-| `MAX_SUGESTOES` | **3** | cada skill custa ~53 tokens no contexto |
-| `FRACAO_DO_TOPO` | **0.55** | quem não chega a 55% da primeira não acompanha |
+| `K1` | **1.5** | standard default; validated in v0.1 |
+| `B` | **0.75** | standard default; penalizes long documents |
+| `CORTE_RUIDO` | **2.0** | at 3.2 the router went silent on 3 of 7 legitimate cases |
+| `MAX_SUGESTOES` | **3** | each skill costs ~53 tokens in context |
+| `FRACAO_DO_TOPO` | **0.55** | anything below 55% of the top score doesn't keep up |
 
-Termo repetido na consulta conta **uma vez**. Ordenação: nota decrescente, empate
-resolvido por índice crescente — determinismo é requisito, não conveniência.
+A term repeated in the query counts **once**. Ordering: score descending, ties
+broken by ascending index — determinism is a requirement, not a convenience.
 
-**Silêncio no ruído.** Turno sem casamento claro = roteador calado. Falso positivo
-custa mais que falso negativo: skill sugerida à toa entra no contexto, gasta token e
-ensina o modelo a ignorar a sugestão.
+**Silence over noise.** A turn with no clear match = a silent router. A false
+positive costs more than a false negative: a skill suggested for no reason enters
+the context, spends tokens, and teaches the model to ignore the suggestion.
 
-## 5. Holdout causal
+## 5. Causal holdout
 
-Em `holdout_pct`% dos turnos (padrão **5**) o roteador se cala de propósito.
+In `holdout_pct`% of turns (default **5**) the router deliberately stays silent.
 
 ```
-h = sha256(sal_local ‖ 0x1F ‖ "holdout|" ‖ prompt)
-cai_no_holdout = (primeiros 4 hex de h, como u32) % 100 < holdout_pct
+h = sha256(local_salt ‖ 0x1F ‖ "holdout|" ‖ prompt)
+falls_in_holdout = (first 4 hex chars of h, as u32) % 100 < holdout_pct
 ```
 
-Determinístico de propósito: a mesma pergunta cai sempre no mesmo braço, então não dá
-para tentar de novo até o roteador falar.
+Deliberately deterministic: the same question always lands in the same arm, so you
+can't just retry until the router speaks.
 
-Condições inegociáveis: **declarado** na cara do usuário na primeira execução,
-**configurável**, **desligável**. Experimento escondido destrói o projeto.
+Non-negotiable conditions: **declared** to the user up front on first run,
+**configurable**, **can be turned off**. A hidden experiment destroys the project.
 
-## 6. Privacidade — o que é gravado
+## 6. Privacy — what gets logged
 
-O evento de rota grava:
+The route event logs:
 
-| campo | o que é |
+| field | what it is |
 |---|---|
-| `prompt_hash` | 32 hex de `sha256(sal_local ‖ 0x1F ‖ prompt)` |
-| `prompt_len` | número de caracteres |
-| `termos` | quantos termos sobraram da tokenização |
-| `holdout`, `modo`, `ms`, `sugestoes` | metadados da decisão |
+| `prompt_hash` | 32 hex chars of `sha256(local_salt ‖ 0x1F ‖ prompt)` |
+| `prompt_len` | character count |
+| `termos` | how many terms survived tokenization |
+| `holdout`, `modo`, `ms`, `sugestoes` | decision metadata |
 
-**O texto do prompt nunca é gravado nem transmitido.** O sal é gerado uma vez, fica em
-`~/.batuta/sal` com permissão 0600 e **nunca é enviado** — sem ele, ninguém consegue
-testar um palpite de prompt contra o hash publicado.
+**The prompt text is never logged or transmitted.** The salt is generated once,
+lives at `~/.batuta/sal` with 0600 permissions, and is **never sent** — without it,
+nobody can test a guessed prompt against the published hash.
 
-O que sobe (e só com opt-in explícito) é o **resumo diário agregado por skill**,
-schema `batuta.resumo_diario.v1` — nunca evento cru. 200 turnos/dia viram ~20 linhas.
+What gets uploaded (and only with explicit opt-in) is the **daily summary
+aggregated per skill**, schema `batuta.resumo_diario.v1` — never the raw event. 200
+turns/day become ~20 lines.
 
-## 7. Rede
+## 7. Network
 
-**O binário não acessa a rede. Nunca.** Quem baixa o registro público é o wrapper npm
-(`batuta registro atualizar`); o binário só lê o arquivo em cache. Isso mantém o
-caminho quente auditável por inspeção: não existe socket para revisar.
+**The binary never touches the network. Ever.** The npm wrapper
+(`batuta registro atualizar`) is what downloads the public registry; the binary
+only reads the cached file. This keeps the hot path auditable by inspection —
+there's no socket to review.
 
-## 8. Transportes — um cérebro, três bocas
+## 8. Transports — one brain, three mouths
 
-1. **Hook `UserPromptSubmit`** — principal. Determinístico; o stdout entra no contexto;
-   bloqueia o turno; timeout descarta a saída inteira. Por isso o hook sai calado com
-   código 0 quando qualquer coisa dá errado.
-2. **MCP** — chat e Cowork, onde não há hook. O dado nasce marcado `modo: degradado`.
-3. **Skill** — fallback mais fraco.
+1. **`UserPromptSubmit` hook** — the primary one. Deterministic; stdout goes into
+   the context; blocks the turn; a timeout discards the whole output. That's why
+   the hook stays silent with exit code 0 whenever anything goes wrong.
+2. **MCP** — chat and Cowork, where there's no hook. The data is born tagged
+   `modo: degradado` (degraded mode).
+3. **Skill** — the weakest fallback.
 
-## 9. O funil
+## 9. The funnel
 
 ```
 route  →  activate  →  outcome
 ```
 
-- **route** — o Batuta propôs
-- **activate** — a skill disparou de verdade (`PostToolUse` na tool Skill; o evento OTEL
-  `claude_code.skill_activated` distingue usuário de modelo)
-- **outcome** — o turno terminou bem? Proxies duros (reprompt, erro, retry), voto de uma
-  tecla, juiz noturno
+- **route** — Batuta proposed it
+- **activate** — the skill actually fired (`PostToolUse` on the Skill tool; the OTEL
+  event `claude_code.skill_activated` distinguishes user from model)
+- **outcome** — did the turn end well? Hard proxies (reprompt, error, retry), a
+  one-key vote, an overnight judge
 
-Métricas: taxa de disparo (`activate ÷ route`) · skill fantasma (0 activate em N
-turnos) · lift contra o holdout · **custo por tarefa concluída** — a métrica que
-ninguém tem, porque uma skill pode encarecer a chamada e baratear a tarefa matando
-reprompts.
+Metrics: fire rate (`activate ÷ route`) · ghost skill (0 activations in N turns) ·
+lift against the holdout · **cost per completed task** — the metric nobody has,
+because a skill can make the call more expensive while making the task cheaper by
+killing reprompts.
 
-## 10. A bateria
+## 10. The battery
 
-`crates/batuta/tests/conformidade.rs`, 15 testes, rodados com `--test-threads=1`.
+`crates/batuta/tests/conformidade.rs`, 15 tests, run with `--test-threads=1`.
 
-| # | o que trava |
+| # | what it locks down |
 |---|---|
-| c01 | sha256 contra vetores conhecidos, inclusive multi-bloco |
-| c02 | acento dobrado, palavra-cola fora, número solto fora |
-| c03 | prefixo de 5, e palavra curta **sem** prefixo |
-| c04 | frontmatter com continuação indentada |
-| c05 | índice sobrevive à ida e volta do disco; leitura parcial materializa só os termos pedidos |
-| c06 | 5 consultas legítimas ranqueiam a skill certa em primeiro |
-| c07 | 5 ruídos deixam o roteador calado |
-| c08 | K1, B, corte, teto e 400 termos congelados |
-| c09 | determinismo |
-| c10 | holdout determinístico e na faixa (5% ± amostra em 2000 sorteios) |
-| c11 | o prompt não aparece no evento, e o hash muda com o sal |
-| c12 | o resumo diário não carrega hash de prompt nem id de turno |
-| c13 | JSON canônico (chaves ordenadas) e ida e volta |
-| c14 | data UTC |
-| c15 | 506 skills dentro do orçamento |
+| c01 | sha256 against known vectors, including multi-block |
+| c02 | double accents, glue words excluded, stray numbers excluded |
+| c03 | the 5-character prefix, and short words **without** a prefix |
+| c04 | frontmatter with an indented continuation |
+| c05 | the index survives a round trip to disk; a partial read materializes only the requested terms |
+| c06 | 5 legitimate queries rank the right skill first |
+| c07 | 5 noise cases leave the router silent |
+| c08 | K1, B, the cutoff, the ceiling, and the 400-term cap are frozen |
+| c09 | determinism |
+| c10 | the holdout is deterministic and within range (5% ± sample variance over 2000 draws) |
+| c11 | the prompt never appears in the event, and the hash changes with the salt |
+| c12 | the daily summary carries no prompt hash and no turn id |
+| c13 | canonical JSON (sorted keys) and round-trip |
+| c14 | UTC dates |
+| c15 | 506 skills within budget |
 
-Medido em 24/08/2026, nesta máquina: **506 skills indexadas em 91ms**, **50 rotas em
-136ms no total** (~2,7ms por rota, subida de processo incluída), índice de 397 KB.
+Measured on 08/24/2026, on this machine: **506 skills indexed in 91ms**, **50
+routes in 136ms total** (~2.7ms per route, process startup included), 397 KB index.
 
-## 11. O que o v0.1 em Node ensinou
+## 11. What v0.1 in Node taught us
 
-O algoritmo rodava em 2ms. A **subida do processo Node era ~200ms** — sozinha, estourava
-o orçamento do hook. Daí o binário Rust estático (subida de 1 a 3ms) e o pacote npm
-como wrapper fino.
+The algorithm ran in 2ms. **Node process startup was ~200ms** — on its own, that
+blew the hook's budget. Hence the static Rust binary (startup of 1 to 3ms) and the
+npm package as a thin wrapper.
 
-Se um dia 300ms não bastar, o plano B é daemon com socket unix. É plano B, não A.
+If 300ms ever isn't enough, plan B is a daemon with a unix socket. It's plan B, not
+plan A.

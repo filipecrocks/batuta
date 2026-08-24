@@ -1,35 +1,36 @@
--- BATUTA — esquema inicial (Postgres 16 / Neon)
+-- BATUTA — initial schema (Postgres 16 / Neon)
 --
--- Este banco é CACHE DE LEITURA, não fonte de verdade. A verdade é o repositório
--- git público (protocolo, bateria, resultados crus) mais a cadeia de hash de
--- registros/, carimbada fora do nosso controle por OpenTimestamps (§8). Se este
--- banco for perdido inteiro, ele se reconstrói dos arquivos; se ele for adulterado,
--- a corrente de hash denuncia. Por isso ninguém aqui guarda nada que não possa ser
--- republicado em público amanhã de manhã.
+-- This database is a READ CACHE, not the source of truth. The truth is the public
+-- git repository (protocol, battery, raw results) plus the hash chain of
+-- registros/, timestamped outside our control by OpenTimestamps (§8). If this
+-- database were lost entirely, it can be rebuilt from the files; if it were
+-- tampered with, the hash chain gives it away. That's why nothing stored here
+-- can't be republished in public tomorrow morning.
 --
--- Aplicar com:  psql "$DATABASE_URL" -f sql/001_inicial.sql
+-- Apply with:  psql "$DATABASE_URL" -f sql/001_inicial.sql
 
 begin;
 
 create schema if not exists batuta;
 
 -- =========================================================================
--- FROTA
+-- FLEET
 -- =========================================================================
 
--- Uma linha por instalação do binário. O id chega PRONTO do cliente: é
--- sha256('instalacao|' || sal_local)[..16], derivado de um sal que nunca sai da
--- máquina (casa::id_instalacao). O servidor não gera, não confere e não consegue
--- reverter esse id — ele só serve para dizer "estas linhas vieram da mesma máquina".
+-- One row per installation of the binary. The id arrives READY from the client: it's
+-- sha256('instalacao|' || sal_local)[..16], derived from a salt that never leaves the
+-- machine (casa::id_instalacao). The server doesn't generate it, doesn't verify it,
+-- and can't reverse it — it only serves to say "these rows came from the same
+-- machine".
 --
--- NÃO EXISTE, DE PROPÓSITO: coluna de IP, de user agent, de país, de fuso, de
--- hostname, de e-mail. Não é esquecimento nem "fica para depois". Dado que não se
--- coleta não vaza, não é intimado, não é vendido junto numa aquisição e não muda de
--- ideia quando muda a diretoria. O único produto do Batuta é credibilidade (§14.1);
--- guardar IP para "entender melhor a distribuição geográfica" custaria mais do que
--- qualquer gráfico que ele produzisse. Quem operar o ingest tem que garantir também
--- que o log de acesso do provedor não guarde IP com o corpo — o schema aqui só
--- resolve a metade que é nossa.
+-- DOES NOT EXIST, ON PURPOSE: an IP column, user agent, country, timezone,
+-- hostname, or email. This isn't an oversight or "left for later". Data that isn't
+-- collected doesn't leak, can't be subpoenaed, doesn't get sold along in an
+-- acquisition, and doesn't change its mind when the leadership changes. Batuta's
+-- only product is credibility (§14.1); keeping IP "to better understand geographic
+-- distribution" would cost more than any chart it could produce. Whoever operates
+-- the ingest also has to make sure the provider's access log doesn't keep IP
+-- alongside the body — the schema here only covers our half.
 create table if not exists batuta.instalacoes (
   id             text        primary key,
   primeiro_visto timestamptz not null default now(),
@@ -39,40 +40,40 @@ create table if not exists batuta.instalacoes (
   constraint instalacoes_id_formato check (id ~ '^[0-9a-f]{16}$')
 );
 
-comment on table  batuta.instalacoes is 'Frota. Sem IP, sem user agent, sem geolocalização — ver comentário no DDL.';
-comment on column batuta.instalacoes.modo is 'local (hook, funil completo) ou degradado (MCP/skill, funil incompleto). Anda junto do número porque muda o que o número significa.';
+comment on table  batuta.instalacoes is 'Fleet. No IP, no user agent, no geolocation — see the comment in the DDL.';
+comment on column batuta.instalacoes.modo is 'local (hook, complete funnel) or degradado (MCP/skill, incomplete funnel). Travels with the number because it changes what the number means.';
 
--- O corpo cru que a instalação enviou, guardado como chegou. Guardar o payload
--- inteiro em jsonb é o que permite recalcular o rollup depois de um bug de
--- agregação sem pedir nada de volta para a frota.
+-- The raw body the installation sent, stored as received. Storing the whole
+-- payload in jsonb is what allows recomputing the rollup later after an
+-- aggregation bug without asking the fleet for anything back.
 --
--- REENVIO DO MESMO DIA SUBSTITUI, NÃO DUPLICA: a chave primária é (instalacao_id,
--- dia). O cliente pode mandar o resumo do dia às 14h e de novo às 23h com o dia
--- fechado; a segunda versão é a boa. Sem isso, cada retentativa de rede viraria
--- usuário novo no ranking.
+-- RESENDING THE SAME DAY REPLACES, IT DOES NOT DUPLICATE: the primary key is
+-- (instalacao_id, dia). The client can send the day's summary at 2pm and again at
+-- 11pm once the day is closed; the second version is the good one. Without this,
+-- every network retry would become a new user in the ranking.
 create table if not exists batuta.resumos_diarios (
   instalacao_id text        not null references batuta.instalacoes(id) on delete cascade,
   dia           date        not null,
   payload       jsonb       not null,
   recebido_em   timestamptz not null default now(),
   hash          text        not null,
-  -- a PK composta É o UNIQUE(instalacao_id, dia) exigido pelo protocolo de ingestão
+  -- the composite PK IS the UNIQUE(instalacao_id, dia) required by the ingestion protocol
   primary key (instalacao_id, dia)
 );
 
-comment on column batuta.resumos_diarios.hash is 'sha256 do payload em JSON canônico (chaves alfabéticas, sem espaço — igual a json::escrever do Rust). Serve para o remetente conferir que o que chegou é byte a byte o que ele mandou.';
+comment on column batuta.resumos_diarios.hash is 'sha256 of the payload in canonical JSON (alphabetical keys, no spaces — same as Rust''s json::escrever). Lets the sender verify that what arrived is byte for byte what they sent.';
 
 create index if not exists resumos_diarios_dia_idx        on batuta.resumos_diarios (dia desc);
 create index if not exists resumos_diarios_recebido_idx   on batuta.resumos_diarios (recebido_em desc);
 
 -- =========================================================================
--- ROLLUP — a única tabela que as páginas estáticas leem
+-- ROLLUP — the only table the static pages read
 -- =========================================================================
 
--- O lote noturno (e o próprio ingest, para o dia recebido) reescreve isto a partir
--- de resumos_diarios. É derivada: pode ser apagada inteira e reconstruída. Fica
--- desnormalizada de propósito, porque a página é estática e a consulta tem que ser
--- um SELECT burro sem join.
+-- The nightly batch (and the ingest itself, for the day just received) rewrites
+-- this from resumos_diarios. It's derived: it can be dropped entirely and
+-- rebuilt. Deliberately denormalized, because the page is static and the query
+-- has to be a dumb SELECT with no join.
 create table if not exists batuta.metricas_skill_dia (
   skill                  text        not null,
   dia                    date        not null,
@@ -88,26 +89,28 @@ create table if not exists batuta.metricas_skill_dia (
   tokens_out             double precision not null default 0,
   custo_usd              numeric(16,6)    not null default 0,
   turnos_ate_fim_mediana double precision,
-  -- quantas instalações distintas entraram nesta linha. É o n da amostra: taxa sem
-  -- n não se publica, e linha com instalacoes=1 é anedota, não medição.
+  -- how many distinct installations went into this row. It's the sample's n: a
+  -- rate without n isn't published, and a row with instalacoes=1 is an anecdote,
+  -- not a measurement.
   instalacoes            integer     not null default 0,
   atualizado_em          timestamptz not null default now(),
   primary key (skill, dia)
 );
 
-comment on column batuta.metricas_skill_dia.custo_usd is 'numeric e não float: dinheiro somado em float acumula erro e a manchete do projeto é justamente custo por tarefa concluída.';
-comment on column batuta.metricas_skill_dia.turnos_ate_fim_mediana is 'Mediana das medianas por instalação — aproximação assumida. A mediana exata exigiria subir a distribuição, e distribuição por turno é evento cru disfarçado (§4.5).';
+comment on column batuta.metricas_skill_dia.custo_usd is 'numeric, not float: money summed in float accumulates error, and the project''s whole headline is cost per completed task.';
+comment on column batuta.metricas_skill_dia.turnos_ate_fim_mediana is 'Median of medians per installation — an assumed approximation. The exact median would require uploading the distribution, and a per-turn distribution is a raw event in disguise (§4.5).';
 
 create index if not exists metricas_skill_dia_dia_idx   on batuta.metricas_skill_dia (dia desc);
 create index if not exists metricas_skill_dia_skill_idx on batuta.metricas_skill_dia (skill, dia desc);
 
 -- =========================================================================
--- CATÁLOGO DE SKILLS
+-- SKILLS CATALOG
 -- =========================================================================
 
--- Registro de skill vista, não redistribuição. Skill sem licença clara não entra no
--- kit: vira instalador que aponta para a fonte (§4.6). licenca_verificada é
--- afirmação de gente que abriu o arquivo LICENSE, não de scraper que leu badge.
+-- Record of a skill seen, not redistribution. A skill without a clear license
+-- doesn't make it into the kit: it becomes an installer that points to the
+-- source instead (§4.6). licenca_verificada is an assertion from someone who
+-- opened the LICENSE file, not from a scraper that read a badge.
 create table if not exists batuta.skills (
   slug               text        primary key,
   nome               text        not null,
@@ -117,7 +120,7 @@ create table if not exists batuta.skills (
   primeira_vista     timestamptz not null default now()
 );
 
--- lista curta e muito consultada: "o que ainda está sem licença conferida?"
+-- short, heavily queried list: "what's still without a verified license?"
 create index if not exists skills_licenca_pendente_idx
   on batuta.skills (slug) where licenca_verificada = false;
 
@@ -125,7 +128,7 @@ create index if not exists skills_licenca_pendente_idx
 -- ARENA
 -- =========================================================================
 
--- CREATE TYPE não aceita IF NOT EXISTS; o DO deixa o arquivo reaplicável.
+-- CREATE TYPE doesn't accept IF NOT EXISTS; the DO block keeps the file re-runnable.
 do $$
 begin
   if not exists (
@@ -134,11 +137,11 @@ begin
     where t.typname = 'status_tarefa' and n.nspname = 'batuta'
   ) then
     create type batuta.status_tarefa as enum (
-      'triagem',     -- chegou, ninguém olhou
-      'recusada',    -- executável escondido, fora de escopo, spam
-      'duplicada',   -- já existe tarefa equivalente
-      'canonizada',  -- reescrita em enunciado + critério de aceite
-      'fila',        -- canonizada e votada, esperando rodada
+      'triagem',     -- arrived, nobody has looked yet
+      'recusada',    -- hidden executable, out of scope, spam
+      'duplicada',   -- an equivalent task already exists
+      'canonizada',  -- rewritten as a statement + acceptance criteria
+      'fila',        -- canonized and voted on, waiting for a round
       'rodando',
       'publicada'
     );
@@ -146,11 +149,12 @@ begin
 end
 $$;
 
--- TAREFA ENVIADA NUNCA RODA COMO CHEGOU (§10). enunciado_original é o que a pessoa
--- escreveu e fica intocado para auditoria; enunciado_canonico é o que a bateria
--- executa, e nasce NULL — ninguém pula a canonização por pressa. Quem envia sugere o
--- problema; a régua é do Batuta. Sem essa porta, autor de skill manda exatamente a
--- tarefa que a skill dele vence e o ranking vira vitrine.
+-- A SUBMITTED TASK NEVER RUNS AS SENT (§10). enunciado_original is what the person
+-- wrote and stays untouched for auditing; enunciado_canonico is what the battery
+-- runs, and starts out NULL — nobody skips canonization out of a rush. Whoever
+-- submits suggests the problem; the rules belong to Batuta. Without this gate, a
+-- skill author would send exactly the task their skill wins at and the ranking
+-- would turn into a showcase.
 create table if not exists batuta.tarefas (
   id                 bigint generated always as identity primary key,
   enunciado_original text        not null,
@@ -160,8 +164,8 @@ create table if not exists batuta.tarefas (
   complexidade       text,
   status             batuta.status_tarefa not null default 'triagem',
   origem             text        not null default 'publico',
-  -- contato é opcional e serve para uma coisa só: avisar quem enviou quando a
-  -- tarefa rodar. Não vira lista, não vira newsletter, não vira login.
+  -- contact is optional and serves one purpose only: notifying whoever submitted
+  -- the task when it runs. It doesn't become a mailing list, a newsletter, or a login.
   contato            text,
   criado_em          timestamptz not null default now(),
   constraint tarefas_categoria_ck check (
@@ -170,8 +174,9 @@ create table if not exists batuta.tarefas (
   constraint tarefas_complexidade_ck check (
     complexidade is null or complexidade in ('simples','media','complexa')
   ),
-  -- estado só avança para depois da canonização se existir enunciado canônico e
-  -- critério de aceite. O banco segura a regra que a pressa quebraria.
+  -- status only advances past canonization if a canonical statement and
+  -- acceptance criteria both exist. The database enforces the rule that a rush
+  -- would otherwise break.
   constraint tarefas_canonizada_ck check (
     status in ('triagem','recusada','duplicada')
     or (enunciado_canonico is not null and criterio_aceite is not null)
@@ -180,12 +185,13 @@ create table if not exists batuta.tarefas (
 
 create index if not exists tarefas_status_idx on batuta.tarefas (status, criado_em desc);
 
--- VOTO DECIDE A FILA, NUNCA O RESULTADO (§1.6). Esta tabela não tem coluna de nota,
--- de estrela, de "gostei" — de propósito: se um dia alguém quiser somar voto no
--- ranking, vai ter que alterar o schema em público. impressao_digital é um
--- identificador fraco de navegador (o suficiente para atrapalhar voto repetido, longe
--- do suficiente para identificar alguém) e por isso o UNIQUE é anti-ruído, não
--- antifraude. Popularidade é marketing; a régua é desfecho medido (§14.4).
+-- A VOTE DECIDES THE QUEUE, NEVER THE RESULT (§1.6). This table has no rating
+-- column, no star, no "like" — on purpose: if someone ever wants to fold votes
+-- into the ranking, they'll have to change the schema in public. impressao_digital
+-- is a weak browser fingerprint (enough to get in the way of a repeat vote, far
+-- from enough to identify anyone), which is why the UNIQUE constraint is
+-- anti-noise, not anti-fraud. Popularity is marketing; the ruler is a measured
+-- outcome (§14.4).
 create table if not exists batuta.votos (
   tarefa_id        bigint      not null references batuta.tarefas(id) on delete cascade,
   impressao_digital text       not null,
@@ -194,16 +200,16 @@ create table if not exists batuta.votos (
 );
 
 -- =========================================================================
--- RODADAS (matriz de testes, §7)
+-- ROUNDS (test matrix, §7)
 -- =========================================================================
 
 create table if not exists batuta.rodadas (
   id              bigint generated always as identity primary key,
   tarefa_id       bigint references batuta.tarefas(id) on delete set null,
   modelo          text        not null,
-  -- canal não multiplica a matriz principal (§7.2): a matriz roda num canal só e a
-  -- comparação entre canais é experimento separado. A coluna existe para que a
-  -- comparação seja possível, não para virar eixo por descuido.
+  -- canal doesn't multiply the main matrix (§7.2): the matrix runs on a single
+  -- channel, and comparing across channels is a separate experiment. The column
+  -- exists so that comparison is possible, not to become an axis by accident.
   canal           text        not null,
   braco           text        not null,
   receita_slug    text,
@@ -214,17 +220,17 @@ create table if not exists batuta.rodadas (
   juiz_modelo     text,
   juiz_versao     text,
   juiz_prompt_hash text,
-  -- URL do cru publicado: prompt, saídas dos dois braços, veredito. Publicar o cru é
-  -- o que separa o Batuta de README autoproclamado (§9.5).
+  -- URL of the published raw data: prompt, both arms' outputs, verdict. Publishing
+  -- the raw data is what sets Batuta apart from a self-proclaimed README (§9.5).
   bruto_url       text,
   criado_em       timestamptz not null default now(),
   constraint rodadas_braco_ck check (braco in ('sem','skill','receita')),
   constraint rodadas_receita_ck check (braco <> 'receita' or receita_slug is not null),
   constraint rodadas_veredito_ck check (veredito is null or veredito in ('ok','falhou','inconclusivo')),
-  -- O JUIZ NÃO É O RÉU (§6.2): modelo nunca julga a própria saída. Julgamento cruzado
-  -- é lei do protocolo, então é constraint e não convenção.
+  -- THE JUDGE IS NOT THE DEFENDANT (§6.2): a model never judges its own output.
+  -- Cross judging is a rule of the protocol, so it's a constraint, not a convention.
   constraint rodadas_juiz_cruzado_ck check (juiz_modelo is null or juiz_modelo <> modelo),
-  -- juiz sem versão e sem hash do prompt invalida a série histórica (§6.3)
+  -- a judge without a version and without a prompt hash invalidates the historical series (§6.3)
   constraint rodadas_juiz_versionado_ck check (
     juiz_modelo is null or (juiz_versao is not null and juiz_prompt_hash is not null)
   )
@@ -235,12 +241,12 @@ create index if not exists rodadas_modelo_idx  on batuta.rodadas (modelo, criado
 create index if not exists rodadas_receita_idx on batuta.rodadas (receita_slug) where receita_slug is not null;
 
 -- =========================================================================
--- RECEITAS (§5)
+-- RECIPES (§5)
 -- =========================================================================
 
--- Receita é citável e comparável, então versão é parte da identidade: 'iniciante v3'
--- não sobrescreve 'iniciante v2', convive com ela. Quem citou v2 num relatório
--- continua podendo abrir exatamente o que citou.
+-- A recipe is citable and comparable, so the version is part of its identity:
+-- 'iniciante v3' doesn't overwrite 'iniciante v2', it coexists with it. Whoever
+-- cited v2 in a report can still open exactly what they cited.
 create table if not exists batuta.receitas (
   slug         text    not null,
   versao       integer not null,
@@ -251,28 +257,28 @@ create table if not exists batuta.receitas (
   publicada_em timestamptz,
   primary key (slug, versao),
   constraint receitas_versao_ck check (versao >= 1),
-  -- só entra na receita o que o teste aprovou: publicar sem bloco de evidência colado
-  -- é exatamente o que o projeto existe para não fazer
+  -- only what the test approved goes into the recipe: publishing without an
+  -- attached evidence block is exactly what this project exists to prevent
   constraint receitas_evidencia_ck check (publicada_em is null or evidencia <> '{}'::jsonb)
 );
 
-comment on column batuta.receitas.skills is 'Lista de {slug, versao} — skills FIXADAS em versão. Receita que aponta para "a última" não é reprodutível.';
+comment on column batuta.receitas.skills is 'List of {slug, versao} — skills PINNED to a version. A recipe that points to "the latest" isn''t reproducible.';
 
 create index if not exists receitas_publicadas_idx on batuta.receitas (publicada_em desc) where publicada_em is not null;
 
 -- =========================================================================
--- CADEIA DE HASH (§8)
+-- HASH CHAIN (§8)
 -- =========================================================================
 
--- Espelho no banco da pasta registros/ do repositório. bigserial e não identity
--- porque a ordem de id É a ordem da corrente e precisa ser trivial de ler.
--- As proteções (imutabilidade e verificação) estão em sql/002_cadeia.sql.
+-- Database mirror of the repository's registros/ folder. bigserial, not identity,
+-- because the id order IS the chain's order and needs to be trivial to read.
+-- The protections (immutability and verification) live in sql/002_cadeia.sql.
 create table if not exists batuta.registros (
   id             bigserial   primary key,
   tipo           text        not null,
   corpo          jsonb       not null,
   hash           text        not null unique,
-  -- NULL só no gênesis; daí em diante é o hash do registro anterior
+  -- NULL only at genesis; from then on it's the previous record's hash
   hash_anterior  text,
   criado_em      timestamptz not null default now(),
   constraint registros_hash_ck          check (hash ~ '^[0-9a-f]{64}$'),
@@ -281,17 +287,18 @@ create table if not exists batuta.registros (
 
 create index if not exists registros_criado_idx on batuta.registros (criado_em desc);
 create index if not exists registros_tipo_idx   on batuta.registros (tipo, id desc);
--- a RAG só responde com o que está publicado, e cada resposta sai com link + hash
--- (§11): a busca dentro do corpo é caminho quente do portal, então tem índice
+-- the RAG only answers with what's published, and every answer comes with a
+-- link + hash (§11): searching inside the body is a hot path for the portal, so
+-- it gets an index
 create index if not exists registros_corpo_gin  on batuta.registros using gin (corpo jsonb_path_ops);
 
 -- =========================================================================
--- COLABORADORES — crédito é o salário (§1.1)
+-- CONTRIBUTORS — credit is the salary (§1.1)
 -- =========================================================================
 
--- Zero lucro, sempre. Ninguém recebe dinheiro; o nome no portal e no dataset é o
--- pagamento, e é por isso que esta tabela é infraestrutura e não enfeite: é a única
--- forma de retenção que o projeto pode oferecer (§14.2).
+-- Zero profit, always. Nobody gets paid; the name on the portal and in the
+-- dataset is the payment, which is why this table is infrastructure, not
+-- decoration: it's the only form of retention the project can offer (§14.2).
 create table if not exists batuta.colaboradores (
   id    bigint generated always as identity primary key,
   nome  text not null unique,
@@ -304,10 +311,11 @@ create table if not exists batuta.colaboradores (
 -- ROLLUP: resumos_diarios -> metricas_skill_dia
 -- =========================================================================
 
--- Recalcula o dia inteiro do zero em vez de somar incrementalmente. É mais caro e é
--- o certo: reenvio substitui (a PK garante), então somar incremento duplicaria o dia
--- de quem mandou duas vezes. Idempotente por construção — pode rodar quantas vezes
--- quiser, o resultado é o mesmo.
+-- Recomputes the whole day from scratch instead of summing incrementally. It's
+-- more expensive and it's the right call: resending replaces (the PK guarantees
+-- it), so summing an increment would duplicate the day for anyone who sent
+-- twice. Idempotent by construction — can run as many times as needed, the
+-- result is the same.
 create or replace function batuta.recalcular_metricas_dia(p_dia date)
 returns integer
 language plpgsql
@@ -361,8 +369,9 @@ begin
     sum(tokens_in),
     sum(tokens_out),
     sum(custo_usd),
-    -- mediana só entre quem mediu: instalação sem turno concluído entraria como 0 e
-    -- puxaria o número para baixo sem ter medido nada
+    -- median only among those who measured: an installation with no completed
+    -- turn would enter as 0 and pull the number down without having measured
+    -- anything
     percentile_cont(0.5) within group (order by mediana) filter (where mediana > 0),
     count(distinct instalacao_id)::integer,
     now()
@@ -374,6 +383,6 @@ begin
 end;
 $$;
 
-comment on function batuta.recalcular_metricas_dia(date) is 'Idempotente: apaga o dia e reescreve. Chamada pelo ingest para o dia recebido e pelo lote noturno para a janela inteira.';
+comment on function batuta.recalcular_metricas_dia(date) is 'Idempotent: deletes the day and rewrites it. Called by the ingest for the day just received and by the nightly batch for the whole window.';
 
 commit;

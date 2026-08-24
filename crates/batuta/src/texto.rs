@@ -1,20 +1,20 @@
-//! Tokenizador do caminho quente.
+//! Hot-path tokenizer.
 //!
-//! Tres decisoes que valem regra, nao gosto:
-//!  1. Sem stemmer. Stemmer no caminho quente custa tabela e custa tempo. No lugar,
-//!     junto do termo exato indexamos o PREFIXO DE 5 LETRAS de toda palavra com mais
-//!     de 5 letras. "quebrou" e "quebrado" se encontram em "quebr", e o custo e uma
-//!     fatia de string.
-//!  2. Acento nao existe. "codigo" e "código" sao a mesma palavra — voz-para-texto e
-//!     teclado de celular nao concordam sobre isso e o roteador nao pode se importar.
-//!  3. Palavra-cola sai fora. Sem isso o corte de ruido de 2.0 vira decoracao: "o que
-//!     que e isso" casaria com meia biblioteca.
+//! Three decisions that carry the weight of rules, not taste:
+//!  1. No stemmer. A stemmer on the hot path costs a table and costs time. Instead,
+//!     alongside the exact term we index the 5-LETTER PREFIX of every word longer
+//!     than 5 letters. "quebrou" and "quebrado" meet at "quebr", and the cost is a
+//!     string slice.
+//!  2. Accents don't exist. "codigo" and "código" are the same word — voice-to-text and
+//!     phone keyboards don't agree on this, and the router can't afford to care.
+//!  3. Glue words are stripped out. Without this, the 2.0 noise cutoff becomes decoration:
+//!     "o que que e isso" would match half the library.
 
-/// Prefixo indexado junto do termo exato para palavras acima deste tamanho.
+/// Prefix indexed alongside the exact term for words above this length.
 pub const PREFIXO: usize = 5;
 
 const COLA: &[&str] = &[
-    // portugues
+    // portuguese
     "a", "ao", "aos", "as", "ate", "com", "como", "da", "das", "de", "dele", "dela", "deles", "do",
     "dos", "e", "ela", "ele", "eles", "em", "essa", "esse", "esta", "este", "eu", "faz", "fazer",
     "foi", "isso", "isto", "ja", "la", "lhe", "mais", "mas", "me", "mesmo", "meu", "minha",
@@ -22,7 +22,7 @@ const COLA: &[&str] = &[
     "pelo", "por", "pra", "pro", "qual", "quando", "que", "se", "sem", "ser", "seu", "sua", "so",
     "tem", "ter", "teu", "um", "uma", "voce", "vc", "ai", "aqui", "agora", "entao", "tudo", "todo",
     "toda", "coisa", "coisas", "quero", "queria", "preciso", "poderia", "pode", "favor",
-    "obrigado", // ingles
+    "obrigado", // english
     "a", "about", "an", "and", "are", "as", "at", "be", "but", "by", "can", "do", "does", "for",
     "from", "has", "have", "how", "i", "if", "in", "is", "it", "its", "me", "my", "not", "of",
     "on", "or", "please", "so", "that", "the", "their", "them", "then", "there", "these", "they",
@@ -34,8 +34,8 @@ fn e_cola(t: &str) -> bool {
     COLA.contains(&t)
 }
 
-/// Minuscula + acento removido, um caractere de cada vez. Cobre o latim-1 estendido
-/// que aparece em pt/es/fr; o resto passa como esta.
+/// Lowercase + accent removed, one character at a time. Covers the extended Latin-1
+/// range that shows up in pt/es/fr; everything else passes through as-is.
 fn dobrar(c: char) -> char {
     let c = c.to_ascii_lowercase();
     match c {
@@ -57,9 +57,9 @@ fn dobrar(c: char) -> char {
     }
 }
 
-/// Quebra o texto em termos ja normalizados, ja sem cola, ja com o prefixo de 5
-/// letras somado ao termo exato. E o mesmo caminho para indexar e para consultar —
-/// se as duas pontas divergirem, o roteador mente.
+/// Splits the text into terms that are already normalized, already free of glue words,
+/// already with the 5-letter prefix added to the exact term. It's the same path for
+/// indexing and for querying — if the two ends diverge, the router lies.
 pub fn termos(texto: &str) -> Vec<String> {
     let mut saida = Vec::new();
     let mut atual = String::new();
@@ -84,7 +84,7 @@ fn empurrar(saida: &mut Vec<String>, atual: &mut String) {
     if t.len() < 2 || e_cola(&t) {
         return;
     }
-    // numero solto nao roteia nada — 2024, 300, v1 ficam de fora
+    // a standalone number routes nothing — 2024, 300, v1 are left out
     if t.chars().all(|c| c.is_ascii_digit()) {
         return;
     }
@@ -94,9 +94,9 @@ fn empurrar(saida: &mut Vec<String>, atual: &mut String) {
     saida.push(t);
 }
 
-/// Corta o texto em no maximo `n` termos. Corpo de SKILL.md longo nao pode dominar o
-/// indice so por ser longo — o B=0.75 do BM25 ja penaliza documento comprido, isto
-/// aqui e o segundo cinto.
+/// Cuts the text down to at most `n` terms. A long SKILL.md body can't dominate the
+/// index just by being long — the BM25 B=0.75 already penalizes long documents, this
+/// here is the second belt.
 pub fn primeiros(mut v: Vec<String>, n: usize) -> Vec<String> {
     if v.len() > n {
         v.truncate(n);

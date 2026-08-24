@@ -1,10 +1,10 @@
-//! BATERIA DE CONFORMIDADE DO BATUTA
+//! BATUTA CONFORMANCE TEST SUITE
 //!
-//! Este arquivo, junto com o SPEC.md, E O CONTRATO. Um porte para outra linguagem
-//! esta conforme quando passa esta bateria com os mesmos numeros — nao com numeros
-//! parecidos.
+//! This file, together with SPEC.md, IS THE CONTRACT. A port to another language
+//! is conformant when it passes this suite with the same numbers — not with
+//! similar numbers.
 //!
-//! Rode com uma thread so: varios testes compartilham a mesma casa temporaria.
+//! Run with a single thread: several tests share the same temporary home directory.
 //!   cargo test -- --test-threads=1
 
 use batuta::json::Valor;
@@ -35,8 +35,8 @@ fn skill(raiz: &Path, nome: &str, descricao: &str, corpo: &str) {
     .unwrap();
 }
 
-/// Corpus de referencia da bateria. Pequeno de proposito: 10 a 100 skills e o
-/// tamanho real de uma maquina de trabalho.
+/// Reference corpus for the test suite. Deliberately small: 10 to 100 skills is the
+/// real size of a working machine.
 fn corpus() -> PathBuf {
     let base = casa_de_teste();
     let raiz = base.join("skills");
@@ -95,7 +95,7 @@ fn c01_sha256_bate_com_os_vetores_conhecidos() {
     );
 }
 
-// ------------------------------------------------------------ 2. tokenizador
+// ------------------------------------------------------------ 2. tokenizer
 
 #[test]
 fn c02_tokenizador_dobra_acento_corta_cola_e_ignora_numero_solto() {
@@ -128,7 +128,7 @@ fn c03_tolerancia_a_flexao_pelo_prefixo_de_cinco() {
     assert!(a.contains(&"quebrou".to_string()));
     assert!(b.contains(&"quebrado".to_string()));
 
-    // palavra curta NAO ganha prefixo — senao "casa" e "caso" viram a mesma coisa
+    // a short word does NOT get a prefix — otherwise "casa" and "caso" become the same thing
     let c = texto::termos("casa caso");
     assert!(!c.iter().any(|x| x == "cas"), "{:?}", c);
     assert_eq!(texto::PREFIXO, 5);
@@ -154,7 +154,7 @@ fn c04_frontmatter_le_chave_valor_e_continuacao_indentada() {
     assert_eq!(zero, 0);
 }
 
-// -------------------------------------------------------------- 5. indice
+// -------------------------------------------------------------- 5. index
 
 #[test]
 fn c05_indice_sobrevive_a_ida_e_volta_do_disco() {
@@ -188,7 +188,7 @@ fn c05_indice_sobrevive_a_ida_e_volta_do_disco() {
     }
 }
 
-// ---------------------------------------------------------------- 6. rota
+// ---------------------------------------------------------------- 6. route
 
 fn notas(consulta: &str) -> Vec<(String, f64)> {
     indexar();
@@ -307,7 +307,7 @@ fn c10_holdout_e_deterministico_e_fica_na_faixa() {
     );
 }
 
-// ------------------------------------------------------------ 11. privacidade
+// ------------------------------------------------------------ 11. privacy
 
 #[test]
 fn c11_o_prompt_nunca_entra_no_evento() {
@@ -386,7 +386,7 @@ fn c14_data_utc() {
     );
 }
 
-// ---------------------------------------------------- 15. orcamento do turno
+// ---------------------------------------------------- 15. turn budget
 
 #[test]
 fn c15_caminho_quente_cabe_no_orcamento() {

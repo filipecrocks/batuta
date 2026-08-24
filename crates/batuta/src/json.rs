@@ -1,5 +1,5 @@
-//! JSON minimo — leitor e escritor. Sem dependencia, por lei do projeto.
-//! Cobre o suficiente: objeto, lista, string, numero, bool, nulo, escapes \uXXXX.
+//! Minimal JSON — reader and writer. No dependencies, per project law.
+//! Covers enough: object, list, string, number, bool, null, \uXXXX escapes.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -64,7 +64,7 @@ pub fn escapar(s: &str) -> String {
     o
 }
 
-/// Serializa com chaves em ordem alfabetica — canonico, para o hash bater sempre.
+/// Serializes with keys in alphabetical order — canonical, so the hash always matches.
 pub fn escrever(v: &Valor) -> String {
     let mut s = String::new();
     escrever_em(v, &mut s);

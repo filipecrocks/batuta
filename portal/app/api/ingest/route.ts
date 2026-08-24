@@ -1,35 +1,36 @@
 /**
- * POST /api/ingest — recebe UM resumo diário agregado (schema batuta.resumo_diario.v1).
+ * POST /api/ingest — receives ONE aggregated daily summary (schema batuta.resumo_diario.v1).
  *
- * Este é o único ponto do projeto em que dado de usuário entra. Ele é escrito na
- * defensiva contra o NOSSO próprio cliente, não contra atacante: se um bug do
- * binário mandar evento cru, o estrago é irreversível — prompt hash em banco é
- * prompt hash em backup, em réplica e no dump que alguém baixou. Por isso a
- * varredura de chaves proibidas acontece ANTES da validação de schema e recusa o
- * corpo inteiro, mesmo que ele estivesse formalmente correto (§1.3, §4.5).
+ * This is the only point in the project where user data enters. It's written
+ * defensively against OUR OWN client, not against an attacker: if a bug in the
+ * binary sends a raw event, the damage is irreversible — a prompt hash in the
+ * database is a prompt hash in the backup, in the replica, and in the dump someone
+ * downloaded. That's why the forbidden-key sweep happens BEFORE schema validation
+ * and rejects the entire body, even if it was formally correct (§1.3, §4.5).
  *
- * O que este endpoint NÃO faz de propósito: não põe cookie, não lê IP, não guarda
- * user agent, não devolve nada que ajude a correlacionar duas instalações.
+ * What this endpoint deliberately does NOT do: it doesn't set a cookie, doesn't
+ * read the IP, doesn't keep the user agent, doesn't return anything that would
+ * help correlate two installations.
  */
 import { sql, temBanco } from "../../../lib/db";
 import { canonico, sha256Hex } from "../../../lib/cadeia";
 
-// Precisa de node: o hash canônico e o driver rodam nos dois runtimes, mas a
-// ingestão é caminho de escrita e a gente prefere o runtime que dá stack trace
-// inteira quando algo dá errado às 3 da manhã.
+// Needs node: the canonical hash and the driver run on both runtimes, but
+// ingestion is a write path and we prefer the runtime that gives a full
+// stack trace when something breaks at 3am.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** 256 KB. Um dia de uso pesado dá poucos KB (~20 linhas por instalação); quem
- *  mandar mais que isso está mandando outra coisa. */
+/** 256 KB. A day of heavy use produces a few KB (~20 lines per installation); anyone
+ *  sending more than that is sending something else. */
 const LIMITE_BYTES = 256 * 1024;
 
-/** Se qualquer uma destas aparecer em qualquer nível, o corpo é evento cru. */
+/** If any of these show up at any level, the body is a raw event. */
 const CHAVES_PROIBIDAS = ["prompt", "prompt_hash", "turno", "texto"];
 
 const CORS: Record<string, string> = {
-  // O binário roda na máquina de quem instalou, não num domínio nosso: não existe
-  // origem para restringir. O que restringe é o método — POST e só.
+  // The binary runs on the machine of whoever installed it, not on a domain of
+  // ours: there's no origin to restrict. What restricts is the method — POST only.
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "POST, OPTIONS",
   "access-control-allow-headers": "content-type",
@@ -59,11 +60,11 @@ export async function GET() {
   );
 }
 
-// =========================================================== varredura de chaves
+// =========================================================== key sweep
 
-/** Percorre o corpo inteiro atrás de chave proibida. Devolve o caminho da primeira
- *  que achar. Profundidade limitada porque JSON aninhado fundo é ataque de pilha,
- *  não resumo diário. */
+/** Walks the entire body looking for a forbidden key. Returns the path of the
+ *  first one found. Depth is limited because deeply nested JSON is a stack
+ *  attack, not a daily summary. */
 function acharChaveProibida(v: unknown, caminho = "$", nivel = 0): string | null {
   if (nivel > 32) return `${caminho} (aninhamento absurdo)`;
   if (Array.isArray(v)) {
@@ -87,7 +88,7 @@ function acharChaveProibida(v: unknown, caminho = "$", nivel = 0): string | null
   return null;
 }
 
-// ================================================================== validação
+// ================================================================== validation
 
 const CAMPOS_SKILL: Array<[string, "int" | "num" | "txt" | "bool"]> = [
   ["skill", "txt"],
@@ -108,13 +109,13 @@ const CAMPOS_SKILL: Array<[string, "int" | "num" | "txt" | "bool"]> = [
 ];
 
 /**
- * Validação escrita à mão. Sem ajv, sem zod: a única dependência npm do portal é o
- * driver do Neon, e um validador de 80 linhas para um schema que só nós geramos é
- * mais fácil de auditar que uma árvore de dependências. Se o schema crescer a ponto
- * de isto doer, o schema cresceu demais.
+ * Hand-written validation. No ajv, no zod: the portal's only npm dependency is
+ * the Neon driver, and an 80-line validator for a schema only we generate is
+ * easier to audit than a dependency tree. If the schema grows to the point
+ * where this hurts, the schema has grown too much.
  *
- * Devolve lista de motivos legíveis — o cliente tem que conseguir consertar o bug
- * lendo a resposta, sem abrir o nosso código.
+ * Returns a list of readable reasons — the client has to be able to fix the
+ * bug by reading the response, without opening our code.
  */
 function validar(p: any): string[] {
   const e: string[] = [];
@@ -131,7 +132,7 @@ function validar(p: any): string[] {
   } else {
     const d = new Date(`${p.dia}T00:00:00Z`);
     if (Number.isNaN(d.getTime())) e.push(`campo "dia": ${p.dia} não é uma data que existe`);
-    // um dia de folga cobre fuso e relógio meio torto; além disso é relógio quebrado
+    // a day of slack covers timezone and a slightly off clock; beyond that it's a broken clock
     else if (d.getTime() > Date.now() + 36 * 3600 * 1000) {
       e.push(`campo "dia": ${p.dia} está no futuro — confira o relógio da máquina`);
     }
@@ -202,8 +203,8 @@ function validar(p: any): string[] {
 // ======================================================================== POST
 
 export async function POST(req: Request) {
-  // banco fora do ar é 503 e não 500: 503 diz "tenta de novo mais tarde", e o
-  // cliente guarda o resumo do dia para reenviar (o reenvio substitui, não duplica)
+  // database down is 503, not 500: 503 says "try again later", and the
+  // client keeps the day's summary to resend (a resend replaces, it doesn't duplicate)
   if (!temBanco()) {
     return json(
       {
@@ -226,7 +227,7 @@ export async function POST(req: Request) {
   } catch {
     return json({ ok: false, erro: "não deu para ler o corpo da requisição" }, 400);
   }
-  // content-length mente; o tamanho real é o que vale
+  // content-length lies; the real size is what counts
   if (new TextEncoder().encode(cru).length > LIMITE_BYTES) {
     return json({ ok: false, erro: `corpo grande demais: limite ${LIMITE_BYTES} bytes` }, 413);
   }
@@ -238,7 +239,7 @@ export async function POST(req: Request) {
     return json({ ok: false, erro: `JSON inválido: ${(err as Error).message}` }, 400);
   }
 
-  // PRIMEIRA porta, antes do schema: se veio evento cru, nada mais importa
+  // FIRST gate, before the schema: if a raw event came in, nothing else matters
   const proibida = acharChaveProibida(payload);
   if (proibida) {
     return json(
@@ -269,8 +270,8 @@ export async function POST(req: Request) {
     );
   }
 
-  // hash do corpo em forma canônica: é o recibo. Quem enviou pode rodar
-  // `batuta resumo --dia X | sha256sum` do lado dele e comparar.
+  // hash of the body in canonical form: it's the receipt. Whoever sent it can run
+  // `batuta resumo --dia X | sha256sum` on their end and compare.
   const hash = await sha256Hex(canonico(payload));
 
   try {
@@ -292,10 +293,11 @@ export async function POST(req: Request) {
         recebido_em = now()
     `;
 
-    // Rollup do dia recebido, na hora. É recálculo do dia inteiro, não incremento —
-    // idempotente de propósito, porque reenvio substitui. Enquanto a frota for
-    // pequena isso custa milissegundos; quando doer, o lote noturno assume e aqui
-    // vira enfileiramento. Trocar antes disso seria otimizar no escuro.
+    // Rollup of the received day, immediately. It's a recalculation of the whole
+    // day, not an increment — deliberately idempotent, because a resend replaces.
+    // While the fleet is small this costs milliseconds; when it starts hurting,
+    // the nightly batch takes over and this turns into a queue. Switching before
+    // that would be optimizing in the dark.
     const r = await sql<{ linhas: number }>`
       select batuta.recalcular_metricas_dia(${payload.dia}::date) as linhas
     `;

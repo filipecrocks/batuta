@@ -1,18 +1,19 @@
 /**
- * Hash canônico da corrente do Batuta (§8).
+ * Canonical hash of the Batuta chain (§8).
  *
- * Três implementações precisam produzir o MESMO byte para o mesmo dado:
- * `json::escrever` em crates/batuta/src/json.rs (Rust), `script/cadeia.mjs` (Node
- * puro, é quem grava) e este arquivo (portal, é quem confere na frente de quem
- * visita). Se as três divergirem em um espaço em branco, a corrente "quebra" sem
- * ninguém ter mexido em nada e o projeto perde a credibilidade por bug de
- * formatação. Por isso a serialização abaixo é escrita à mão em vez de
- * `JSON.stringify`: precisa bater com o Rust, não com o ECMA-262.
+ * Three implementations need to produce the SAME byte for the same data:
+ * `json::escrever` in crates/batuta/src/json.rs (Rust), `script/cadeia.mjs` (pure
+ * Node, the one that writes) and this file (portal, the one that verifies in front
+ * of the visitor). If the three diverge by so much as a whitespace, the chain
+ * "breaks" without anyone having touched anything, and the project loses
+ * credibility over a formatting bug. That's why the serialization below is
+ * hand-written instead of using `JSON.stringify`: it needs to match Rust, not
+ * ECMA-262.
  *
- * Roda em edge e em node: só WebCrypto, zero dependência.
+ * Runs on edge and on node: only WebCrypto, zero dependency.
  */
 
-/** O primeiro elo aponta para o nada, e o nada tem forma fixa. */
+/** The first link points to nothing, and nothing has a fixed shape. */
 export const GENESIS = "0".repeat(64);
 
 export type Registro = {
@@ -23,16 +24,16 @@ export type Registro = {
   criado_em?: string;
 };
 
-// ------------------------------------------------------------------ canônico
+// ------------------------------------------------------------------ canonical
 
 /**
- * Ordem das chaves = ordem dos code points.
+ * Key order = code point order.
  *
- * O Rust usa BTreeMap<String>, que ordena pelos bytes do UTF-8 — e ordem de bytes
- * UTF-8 é exatamente ordem de code point. O `sort()` do JavaScript ordena por
- * unidade UTF-16, que inverte pares fora do BMP (um emoji ficaria antes de "" em
- * um lado e depois no outro). Com chave ASCII dá na mesma; com uma chave de
- * registro em outro alfabeto, dá hash diferente. Custa três linhas evitar.
+ * Rust uses BTreeMap<String>, which sorts by UTF-8 bytes — and UTF-8 byte order is
+ * exactly code point order. JavaScript's `sort()` sorts by UTF-16 unit, which
+ * reverses pairs outside the BMP (an emoji would end up before "" on one side and
+ * after it on the other). With an ASCII key it comes out the same; with a record
+ * key in another alphabet, it produces a different hash. Costs three lines to avoid.
  */
 function compararChaves(a: string, b: string): number {
   const ca = Array.from(a);
@@ -46,8 +47,8 @@ function compararChaves(a: string, b: string): number {
   return ca.length - cb.length;
 }
 
-/** Espelho exato de `json::escapar` do Rust. Note \b e \f: o Rust manda os dois
- *  pelo caminho genérico \u00XX, e o JSON.stringify usaria \b e \f. */
+/** Exact mirror of Rust's `json::escapar`. Note \b and \f: Rust sends both
+ *  through the generic \u00XX path, while JSON.stringify would use \b and \f. */
 function escapar(s: string): string {
   let o = '"';
   for (const c of s) {
@@ -64,11 +65,11 @@ function escapar(s: string): string {
 }
 
 /**
- * Espelho de como o Rust imprime f64: inteiro puro sai sem casa decimal, o resto
- * é arredondado a 6 casas. O arredondamento do Rust (`f64::round`) desempata para
- * longe do zero; o `Math.round` do JS desempata para cima. Só difere em negativo
- * exato (-0.5), que não aparece em custo nem em contagem — mas o número tem que
- * bater sempre, não quase sempre.
+ * Mirror of how Rust prints f64: a pure integer comes out with no decimal
+ * place, the rest is rounded to 6 places. Rust's rounding (`f64::round`) breaks
+ * ties away from zero; JS's `Math.round` breaks ties upward. It only differs on
+ * an exact negative half (-0.5), which doesn't show up in cost or count fields —
+ * but the number has to match always, not almost always.
  */
 function numero(n: number): string {
   if (!Number.isFinite(n)) {
@@ -79,15 +80,15 @@ function numero(n: number): string {
   const arredondado =
     (escala < 0 ? -Math.round(-escala) : Math.round(escala)) / 1e6;
   let s = String(arredondado);
-  // o Display do Rust nunca usa notação científica; o String() do JS usa fora da
-  // faixa [1e-6, 1e21)
+  // Rust's Display never uses scientific notation; JS's String() uses it outside
+  // the range [1e-6, 1e21)
   if (s.includes("e") || s.includes("E")) {
     s = arredondado.toFixed(6).replace(/\.?0+$/, "");
   }
   return s;
 }
 
-/** JSON canônico: chaves em ordem, sem um espaço sequer. */
+/** Canonical JSON: keys in order, without a single space. */
 export function canonico(v: unknown): string {
   if (v === null || v === undefined) return "null";
   const t = typeof v;
@@ -98,8 +99,8 @@ export function canonico(v: unknown): string {
   if (t === "object") {
     const m = v as Record<string, unknown>;
     const chaves = Object.keys(m)
-      // undefined não existe no lado Rust; tratá-lo como ausente é o que o
-      // JSON.stringify faz e é o que mantém os dois lados iguais
+      // undefined doesn't exist on the Rust side; treating it as absent is what
+      // JSON.stringify does, and it's what keeps both sides equal
       .filter((k) => m[k] !== undefined)
       .sort(compararChaves);
     return (
@@ -122,15 +123,15 @@ export async function sha256Hex(texto: string): Promise<string> {
 }
 
 /**
- * O elo. A pré-imagem é o JSON canônico de `{corpo, hash_anterior}` — o corpo
- * inteiro, mais o hash de quem veio antes. Alterar qualquer registro antigo muda o
- * hash dele, que é o `hash_anterior` do próximo, que muda o hash do próximo, e
- * assim até o topo: é por isso que a adulteração aparece na frente de todo mundo e
- * não só de quem foi conferir aquele registro.
+ * The link. The preimage is the canonical JSON of `{corpo, hash_anterior}` — the
+ * whole body, plus the hash of whatever came before. Altering any old record
+ * changes its hash, which is the next one's `hash_anterior`, which changes the
+ * next one's hash, and so on to the top: that's why tampering shows up in front
+ * of everyone, not just whoever went to check that particular record.
  *
- * Convenção do projeto: `tipo` e `criado_em` também vivem DENTRO do corpo, e o
- * arquivo em registros/ os repete no nível de cima só para ser legível. Sem isso,
- * a data e o rótulo do registro ficariam fora do lacre.
+ * Project convention: `tipo` and `criado_em` also live INSIDE the body, and the
+ * file in registros/ repeats them at the top level only for readability. Without
+ * that, the record's date and label would sit outside the seal.
  */
 export async function proximoHash(
   hashAnterior: string | null,
@@ -142,10 +143,10 @@ export async function proximoHash(
 }
 
 /**
- * Confere a corrente inteira e devolve o ÍNDICE do primeiro elo quebrado, ou -1 se
- * está intacta. Índice e não id: esta função também roda sobre a lista que veio do
- * banco, onde pode faltar registro no meio, e "o terceiro que você me mostrou" é
- * uma afirmação mais honesta que "o registro 3".
+ * Checks the entire chain and returns the INDEX of the first broken link, or -1
+ * if it's intact. Index, not id: this function also runs over lists that came
+ * from the database, where a record in the middle can be missing, and "the third
+ * one you showed me" is a more honest claim than "record 3".
  */
 export async function verificarCadeia(registros: Registro[]): Promise<number> {
   let anterior: string | null = null;
@@ -160,8 +161,8 @@ export async function verificarCadeia(registros: Registro[]): Promise<number> {
   return -1;
 }
 
-/** Motivo legível do elo quebrado — para a página de auditoria dizer o que houve
- *  em vez de mostrar um índice cru. */
+/** Readable reason for the broken link — so the audit page can say what happened
+ *  instead of showing a raw index. */
 export async function motivoQuebra(
   registros: Registro[],
   i: number,

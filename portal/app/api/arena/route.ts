@@ -1,14 +1,15 @@
 /**
- * POST /api/arena — qualquer pessoa envia uma tarefa para a bateria.
+ * POST /api/arena — anyone submits a task to the battery.
  *
- * A tarefa entra com status 'triagem' e enunciado_canonico NULL, e é assim que ela
- * tem que entrar: TAREFA ENVIADA NUNCA RODA COMO CHEGOU (§10). Antes de rodar, ela
- * é reescrita em formato canônico — enunciado + critério de aceite + categoria +
- * complexidade — por quem mantém a bateria. Quem envia sugere o problema; a régua é
- * do Batuta. Sem essa porta, autor de skill manda exatamente a tarefa que a skill
- * dele vence, e o ranking vira vitrine paga em prestígio.
+ * The task enters with status 'triagem' (screening) and enunciado_canonico NULL,
+ * and that's how it has to enter: A SUBMITTED TASK NEVER RUNS AS RECEIVED (§10).
+ * Before it runs, it's rewritten into canonical format — statement + acceptance
+ * criteria + category + complexity — by whoever maintains the battery. Whoever
+ * submits suggests the problem; the ruler belongs to Batuta. Without this gate, a
+ * skill author would submit exactly the task their skill wins, and the ranking
+ * would turn into a showcase paid for in prestige.
  *
- * O voto que vem depois ordena a FILA de teste. Nunca o resultado (§1.6).
+ * The vote that comes afterward orders the test QUEUE. Never the result (§1.6).
  */
 import { sql, temBanco } from "../../../lib/db";
 
@@ -42,17 +43,18 @@ export async function GET() {
   return json({ ok: false, erro: "este endereço só aceita POST", campos: ["enunciado", "categoria", "contato (opcional)"] }, 405);
 }
 
-// ================================================================== triagem 0
+// ================================================================== screening 0
 
 /**
- * Triagem automática — a camada burra, antes da humana.
+ * Automatic screening — the dumb layer, before the human one.
  *
- * Ela não decide se a tarefa é boa; decide se a tarefa é PERIGOSA de ficar guardada.
- * Bloco de código executável e URL de download são recusados na porta porque a
- * bateria roda em máquina de gente e um enunciado é texto, não payload: "escreva um
- * script que baixe e execute isto" não é tarefa de teste, é entrega de carga. Quem
- * quiser propor uma tarefa sobre shell script descreve o comportamento esperado em
- * palavras — que é, aliás, o que o critério de aceite vai exigir de qualquer jeito.
+ * It doesn't decide whether the task is good; it decides whether the task is
+ * DANGEROUS to keep stored. Executable code blocks and download URLs are refused
+ * at the door because the battery runs on people's machines and a task statement
+ * is text, not a payload: "write a script that downloads and executes this" is not
+ * a test task, it's a payload delivery. Anyone who wants to propose a task about a
+ * shell script describes the expected behavior in words — which, incidentally, is
+ * what the acceptance criteria will require anyway.
  */
 const PADROES: Array<[RegExp, string]> = [
   [/```[ \t]*(bash|sh|zsh|shell|console|powershell|ps1|bat|cmd|python|py|ruby|rb|perl|php|node|js|javascript|ts)\b/i,
@@ -112,8 +114,8 @@ export async function POST(req: Request) {
   if (enunciado.length < 20) {
     problemas.push("enunciado tem que ter pelo menos 20 caracteres — descreva a tarefa, não o título dela");
   }
-  // 4000 caracteres é folgado para descrever uma tarefa e apertado para colar um
-  // arquivo inteiro. Quem precisa de mais está mandando anexo, não enunciado.
+  // 4000 characters is generous for describing a task and tight for pasting a
+  // whole file. Anyone who needs more is sending an attachment, not a statement.
   if (enunciado.length > LIMITE_ENUNCIADO) {
     problemas.push(`enunciado tem ${enunciado.length} caracteres; o limite é ${LIMITE_ENUNCIADO}. Descreva o que precisa acontecer e como se sabe que deu certo — o resto a canonização escreve.`);
   }

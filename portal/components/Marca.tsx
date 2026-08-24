@@ -1,15 +1,16 @@
 /**
- * A marca do Batuta.
+ * The Batuta mark.
  *
- * Três hastes que sobem — duas de pé, retas, como as barras de um mostrador; a
- * terceira inclinada, com a ponta em bola: a batuta que rege. Medir e reger, as duas
- * metades do projeto, no mesmo desenho.
+ * Three rising bars — two standing straight, like the bars of a display; the
+ * third tilted, with a ball tip: the baton that conducts. Measuring and conducting,
+ * the two halves of the project, in the same drawing.
  *
- * Grade de 24 unidades, traço de 2.4: continua legível a 16px numa aba do navegador
- * e continua limpo a 512px num cartaz.
+ * 24-unit grid, 2.4 stroke: stays legible at 16px in a browser tab and stays
+ * clean at 512px on a poster.
  *
- * `tom="chapado"` pinta tudo em currentColor, para onde uma marca de duas cores
- * competiria com o texto ao lado (rodapé, favicon monocromático, impressão).
+ * `tom="chapado"` (flat tone) paints everything in currentColor, for places where
+ * a two-color mark would compete with the text next to it (footer, monochrome
+ * favicon, print).
  */
 export function Marca({
   tamanho = 28,

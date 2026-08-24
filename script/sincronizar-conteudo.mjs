@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Copia os documentos-fonte da raiz para dentro do portal.
+// Copies the source documents from the root into the portal.
 //
-// Por que existe: o MANIFESTO.md da raiz e a fonte canonica — e o arquivo que a
-// pessoa le no GitHub e o que o Filipe edita. O portal precisa do mesmo texto, mas
-// o build da Vercel roda com a raiz apontada para `portal/`, e subir de diretorio no
-// build e o tipo de coisa que funciona na sua maquina e quebra na deles.
+// Why it exists: the root's MANIFESTO.md is the canonical source — it's the file
+// people read on GitHub and the one Filipe edits. The portal needs the same text,
+// but the Vercel build runs with the root pointed at `portal/`, and going up a
+// directory in the build is the kind of thing that works on your machine and
+// breaks on theirs.
 //
-// Entao a copia e explicita, versionada, e refeita no prebuild. Divergiu, o build
-// avisa. Rode `node script/sincronizar-conteudo.mjs` depois de editar a raiz.
+// So the copy is explicit, versioned, and redone at prebuild. If it diverges, the
+// build warns. Run `node script/sincronizar-conteudo.mjs` after editing the root.
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +17,7 @@ const aqui = dirname(fileURLToPath(import.meta.url));
 const raiz = join(aqui, "..");
 const destino = join(raiz, "portal", "conteudo");
 
-// documentos markdown -> portal/conteudo/
+// markdown documents -> portal/conteudo/
 const arquivos = [
   ["MANIFESTO.md", "manifesto.md"],
   ["SPEC.md", "spec.md"],
@@ -36,8 +37,9 @@ for (const [de, para] of arquivos) {
   writeFileSync(join(destino, para), readFileSync(origem));
   copiados++;
 }
-// o instalador servido em batuta.space/instalar.sh e O MESMO do repo, nao uma copia
-// editavel a parte — e o que separa confianca de pedido de confianca num `curl | sh`
+// the installer served at batuta.space/instalar.sh is THE SAME ONE as in the repo,
+// not a separately editable copy — that's what separates trust from asking for
+// trust in a `curl | sh`
 const instalador = join(raiz, "script", "instalar.sh");
 if (existsSync(instalador)) {
   mkdirSync(join(raiz, "portal", "public"), { recursive: true });

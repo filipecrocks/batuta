@@ -1,105 +1,109 @@
 # Batuta
 
-**A camada aberta de medição de Agent Skills.** Mede se uma skill funciona de verdade,
-a que custo e em qual modelo — e publica tudo, imutável, sem lucro.
+**The open measurement layer for Agent Skills.** Measures whether a skill actually
+works, at what cost, and on which model — and publishes everything, immutable,
+zero-profit.
 
-Não é o 27º roteador do mercado. É **o juiz** — e funciona com qualquer roteador.
+It's not the 27th router on the market. It's **the judge** — and it works with any
+router.
 
-→ [batuta.space](https://batuta.space) · [manifesto](MANIFESTO.md) · [o contrato](SPEC.md)
+→ [batuta.space](https://batuta.space) · [manifesto](MANIFESTO.md) · [the contract](SPEC.md)
 
 ---
 
-## O problema
+## The problem
 
-Existem hoje dezenas de roteadores de skill. **Nenhum deles publica dado.** Cada um
-mede o próprio gol com a própria régua, e por isso nenhum consegue provar que é melhor
-que o vizinho — nem que serve para alguma coisa.
+Dozens of skill routers exist today. **None of them publish data.** Each measures
+its own goal with its own ruler, so none can prove it's better than the next one —
+or that it's good for anything at all.
 
-Enquanto isso, quem resolve problema de verdade no mundo quase sempre não tem dinheiro
-para modelo caro e não tem como saber o que funciona.
+Meanwhile, the people who actually solve real problems in the world almost never
+have the money for an expensive model, and have no way to know what works.
 
-## Instalar
+## Install
 
 ```sh
-curl -fsSL https://batuta.space/instalar.sh | sh    # ou: npm install -g batuta
+curl -fsSL https://batuta.space/instalar.sh | sh    # or: npm install -g batuta
 batuta index
 batuta install-hooks
 ```
 
-Depois de alguns turnos: `batuta report`.
+After a few turns: `batuta report`.
 
-**Nada sai da sua máquina.** O relatório funciona 100% offline; enviar dado agregado é
-opt-in explícito. Veja [o que fica gravado](https://batuta.space/privacidade) ou rode
-`batuta privacidade`.
+**Nothing leaves your machine.** The report works 100% offline; sending aggregated
+data is explicit opt-in. See [what gets logged](https://batuta.space/privacidade) or
+run `batuta privacidade`.
 
-## O que tem aqui dentro
+## What's in here
 
 ```
-crates/batuta/        binário Rust do caminho quente — sem dependência, sem rede
-  src/                roteador BM25, índice invertido, registro de eventos
-  tests/              a BATERIA DE CONFORMIDADE — 15 testes, o contrato do porte
-portal/               Next.js estático (Vercel) — ranking, receitas, arena, registros
-sql/                  schema Neon + a cadeia de hash com trigger anti-edição
-schema/               JSON Schema do evento local e do resumo diário que sobe
-bateria/v1/           24 tarefas congeladas com critério de aceite escrito antes
-docs/PROTOCOLO.md     o protocolo do Batuta Zero e as três leis do juiz
-script/cadeia.mjs     anexar, verificar e carimbar a corrente de hash
-npm/                  wrapper de dez linhas que baixa o binário
-hooks/                o hook UserPromptSubmit
-registros/            a corrente publicada — verificável por qualquer um
+crates/batuta/        the hot-path Rust binary — no dependencies, no network
+  src/                BM25 router, inverted index, event log
+  tests/              the CONFORMANCE BATTERY — 15 tests, the contract for ports
+portal/               static Next.js (Vercel) — ranking, recipes, arena, records
+sql/                  Neon schema + the hash chain with an anti-edit trigger
+schema/               JSON Schema for the local event and the daily summary that gets uploaded
+bateria/v1/           24 frozen tasks with acceptance criteria written beforehand
+docs/PROTOCOLO.md     the Batuta Zero protocol and the judge's three laws
+script/cadeia.mjs     append, verify, and stamp the hash chain
+npm/                  ten-line wrapper that downloads the binary
+hooks/                the UserPromptSubmit hook
+registros/            the published chain — verifiable by anyone
 ```
 
-## Números medidos
+## Measured numbers
 
-Medidos em 24/08/2026, não estimados:
+Measured on 08/24/2026, not estimated:
 
 | | |
 |---|---|
-| indexar 506 skills | **91 ms** |
-| 50 rotas (subida de processo incluída) | **136 ms** no total, ~2,7 ms cada |
-| tamanho do índice | 397 KB |
-| bateria de conformidade | 15 de 15 verdes |
+| indexing 506 skills | **91 ms** |
+| 50 routes (process startup included) | **136 ms** total, ~2.7 ms each |
+| index size | 397 KB |
+| conformance battery | 15 of 15 green |
 
-O orçamento do caminho quente é 100 ms por turno, com teto duro de 300 ms.
+The hot-path budget is 100 ms per turn, with a hard ceiling of 300 ms.
 
-## As regras que não se negociam
+## The rules that aren't negotiable
 
-1. **Zero lucro.** Ninguém ganha nada — fundadores nem colaboradores.
-2. **O prompt nunca sai da sua máquina.** Só hash com sal local, e o sal não é enviado.
-3. **O binário não acessa a rede.** Quem faz rede é o wrapper.
-4. **Silêncio no ruído.** Falso positivo custa mais que falso negativo.
-5. **O juiz é cego, não é réu, e é versionado.**
-6. **Existe grupo de controle.** 5% dos turnos com o roteador calado de propósito,
-   declarado, configurável, desligável.
-7. **A corrente não se edita.** Cada resultado carrega o hash do anterior, e o topo é
-   carimbado fora do nosso controle.
+1. **Zero profit.** Nobody earns anything — not founders, not contributors.
+2. **The prompt never leaves your machine.** Only a hash with a local salt, and the
+   salt is never sent.
+3. **The binary never touches the network.** The wrapper handles networking.
+4. **Silence over noise.** A false positive costs more than a false negative.
+5. **The judge is blind, is not the defendant, and is versioned.**
+6. **A control group exists.** 5% of turns have the router deliberately silenced —
+   declared, configurable, and can be turned off.
+7. **The chain cannot be edited.** Every result carries the previous one's hash, and
+   the top is stamped outside our control.
 
-Detalhe de cada uma: [MANIFESTO.md](MANIFESTO.md) e [SPEC.md](SPEC.md).
+Details on each: [MANIFESTO.md](MANIFESTO.md) and [SPEC.md](SPEC.md).
 
-## Contribuir
+## Contributing
 
-O que vale mais que código, nesta ordem:
+What's worth more than code, in this order:
 
-1. **Instalar e ligar o envio** — amostra é o insumo escasso, não dinheiro.
-2. **Mandar uma tarefa real** para a [arena](https://batuta.space/arena).
-3. **Rodar o protocolo do Batuta Zero** e publicar o cru.
-4. **Achar um erro no método** e abrir issue. Credibilidade é o único produto.
+1. **Install it and turn on submission** — sample size is the scarce input, not money.
+2. **Send a real task** to the [arena](https://batuta.space/arena).
+3. **Run the Batuta Zero protocol** and publish the raw output.
+4. **Find a flaw in the method** and open an issue. Credibility is the only product.
 
-Portar o caminho quente para outra linguagem também vale — e o porte está conforme
-quando passa `crates/batuta/tests/conformidade.rs` com os mesmos números.
+Porting the hot path to another language is also worth doing — and a port is
+conformant when it passes `crates/batuta/tests/conformidade.rs` with the exact same
+numbers.
 
-## Rodar os testes
+## Running the tests
 
 ```sh
 cd crates/batuta
-cargo test -- --test-threads=1     # a bateria compartilha uma casa temporária
+cargo test -- --test-threads=1     # the battery shares one temp home directory
 cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-## Licença
+## License
 
-MIT. Veja [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
-O nome de quem contribui entra no portal e no dataset — junto do número que a pessoa
-ajudou a produzir, não numa lista de agradecimentos qualquer.
+Every contributor's name goes into the portal and the dataset — next to the number
+they helped produce, not into some generic acknowledgments list.

@@ -1,5 +1,5 @@
-//! Data sem dependencia: epoch -> YYYY-MM-DD em UTC.
-//! Algoritmo civil_from_days de Howard Hinnant, dominio publico.
+//! Dependency-free date: epoch -> YYYY-MM-DD in UTC.
+//! civil_from_days algorithm by Howard Hinnant, public domain.
 
 pub fn dia_utc(epoch: u64) -> String {
     let (a, m, d) = civil(epoch as i64 / 86_400);
