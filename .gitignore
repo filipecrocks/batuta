@@ -10,3 +10,5 @@ node_modules/
 npm/vendor/
 .DS_Store
 *.tsbuildinfo
+
+.vercel
