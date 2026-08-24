@@ -9,7 +9,7 @@ It is not the 27th router on the market. Batuta is an **observability and
 measurement layer** that works with any router. It is never the sole proof that
 work was delivered, and it never judges its own telemetry.
 
-→ [batuta.space](https://batuta.space) · [manifesto](MANIFESTO.md) · [the contract](SPEC.md)
+→ [batuta.space](https://batuta.space) · [manifesto](MANIFESTO.md) · [the contract](SPEC.md) · [Fibonacci planning](docs/FIBONACCI-PLANNING.md)
 
 ---
 

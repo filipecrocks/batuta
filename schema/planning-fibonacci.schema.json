@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batuta.space/schema/planning-fibonacci.schema.json",
+  "title": "Shared Fibonacci planning estimate",
+  "description": "Planning only. Actual duration, cost, attempts and outcomes remain separate measured facts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["planning_points", "must_split"],
+  "properties": {
+    "planning_points": {
+      "description": "Estimate created before execution. Null means unknown, including historical records that were never estimated.",
+      "oneOf": [
+        { "type": "integer", "enum": [1, 2, 3, 5, 8, 13] },
+        { "type": "null" }
+      ],
+      "default": null
+    },
+    "must_split": {
+      "type": "boolean",
+      "description": "True at 13 points. A 13-point item may be planned, but cannot enter execution as one unit."
+    }
+  },
+  "allOf": [
+    { "$ref": "#/$defs/execution_gate" }
+  ],
+  "$defs": {
+    "execution_gate": {
+      "if": {
+        "properties": { "planning_points": { "const": 13 } },
+        "required": ["planning_points"]
+      },
+      "then": {
+        "properties": { "must_split": { "const": true } }
+      },
+      "else": {
+        "properties": { "must_split": { "const": false } }
+      }
+    }
+  }
+}
