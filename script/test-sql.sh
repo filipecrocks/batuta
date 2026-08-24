@@ -87,6 +87,26 @@ insert into batuta.lab_events (
   '{"schema":"batuta.lab_event.v1","cost":{"currency":"USD","amount":0.01}}'::jsonb
 );
 
+insert into batuta.installations (id, batuta_version, mode)
+values ('0123456789abcdef', 'test', 'local');
+insert into batuta.daily_summaries (installation_id, day, payload, hash)
+values (
+  '0123456789abcdef', '2026-08-24',
+  '{"skills":[{"skill":"forged","routes":1,"activations":1,"judged_turns":9,"successful_turns":9,"reprompts":0,"errors":0,"retries":0,"tokens_in":0,"tokens_out":0,"cost_usd":0,"median_turns_to_finish":1}]}'::jsonb,
+  repeat('f', 64)
+);
+select batuta.recalculate_day_metrics('2026-08-24');
+
+do $$
+declare metrics record;
+begin
+  select * into strict metrics from batuta.skill_day_metrics
+  where skill = 'forged' and day = '2026-08-24';
+  if metrics.turns_judged <> 0 or metrics.turns_ok <> 0 then
+    raise exception 'client aggregate self-attestation reached rollup: %', row_to_json(metrics);
+  end if;
+end $$;
+
 do $$
 begin
   begin

@@ -70,8 +70,15 @@ pub fn route(prompt: &str, mode: &str, given_turn_id: Option<String>, version: &
         };
     };
     let terms = text::terms(prompt);
+    let mode = if matches!(mode, "hook" | "mcp" | "skill" | "lab") {
+        mode
+    } else {
+        "hook"
+    };
     let prompt_hash = sha256::hash_with_salt(&salt, prompt);
-    let turn_id = given_turn_id.unwrap_or_else(|| new_turn_id(&salt));
+    let turn_id = given_turn_id
+        .filter(|candidate| text::is_safe_correlation_id(candidate))
+        .unwrap_or_else(|| new_turn_id(&salt));
     let holdout = is_holdout(&salt, prompt, config.holdout_pct);
 
     let mut suggestions: Vec<Value> = Vec::new();

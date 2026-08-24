@@ -92,7 +92,7 @@ What's worth more than code, in this order:
 4. **Find a flaw in the method** and open an issue. Credibility is the only product.
 
 Porting the hot path to another language is also worth doing — and a port is
-conformant when it passes `crates/batuta/tests/conformidade.rs` with the exact same
+conformant when it passes `crates/batuta/tests/conformance.rs` with the exact same
 numbers.
 
 ## Running the tests

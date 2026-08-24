@@ -139,6 +139,6 @@ function run(args) {
   process.exit(2);
 }
 
-module.exports = { run: run, appDir: appDir };
+module.exports = { run: run, appDir: appDir, download: download };
 
 if (require.main === module) run(process.argv.slice(2));

@@ -27,7 +27,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["passed", "total"],
-      "properties": { "passed": { "$ref": "#/$defs/count" }, "total": { "$ref": "#/$defs/count" } }
+      "description": "Client aggregates cannot attest outcomes. Verified LAB receipts are aggregated through the separate LAB event contract.",
+      "properties": { "passed": { "const": 0 }, "total": { "const": 0 } }
     },
     "skill": {
       "type": "object",
@@ -39,8 +40,8 @@
         "routes": { "$ref": "#/$defs/count" },
         "activations": { "$ref": "#/$defs/count" },
         "user_activations": { "$ref": "#/$defs/count" },
-        "judged_turns": { "$ref": "#/$defs/count" },
-        "successful_turns": { "$ref": "#/$defs/count" },
+        "judged_turns": { "const": 0 },
+        "successful_turns": { "const": 0 },
         "reprompts": { "$ref": "#/$defs/count" },
         "errors": { "$ref": "#/$defs/count" },
         "retries": { "$ref": "#/$defs/count" },

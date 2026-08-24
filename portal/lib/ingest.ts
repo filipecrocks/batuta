@@ -349,6 +349,9 @@ export function validateDailySummary(value: unknown): {
     exactKeys(arm, isV2 ? ["passed", "total"] : ["ok", "n"], name, errors);
     if (!nonNegativeInteger(passed) || !nonNegativeInteger(total)) errors.push(`${name} counts must be non-negative safe integers`);
     else if ((passed as number) > (total as number)) errors.push(`${name}.passed cannot exceed total`);
+    else if ((passed as number) !== 0 || (total as number) !== 0) {
+      errors.push(`${name} must be zero in client aggregates; only verified LAB receipts can establish judged outcomes`);
+    }
   }
 
   if (!Array.isArray(value.skills) || value.skills.length > 5000) {
@@ -389,6 +392,11 @@ export function validateDailySummary(value: unknown): {
           : ["rotas", "ativacoes", "ativacoes_usuario", "turnos_julgados", "turnos_ok", "reprompts", "erros", "retries"];
       for (const field of integerFields) {
         if (!nonNegativeInteger(skill[field])) errors.push(`skills[${index}].${field} must be a non-negative safe integer`);
+      }
+      const judgedField = isV2 ? "judged_turns" : isEnglishV1 ? "turns_judged" : "turnos_julgados";
+      const successfulField = isV2 ? "successful_turns" : isPortugueseV1 ? "turnos_ok" : "turns_ok";
+      if (skill[judgedField] !== 0 || skill[successfulField] !== 0) {
+        errors.push(`skills[${index}] client aggregate cannot attest judged or successful outcomes`);
       }
       const numericFields = isV2
         ? ["tokens_in", "tokens_out", "cost_usd", "median_turns_to_finish"]
@@ -464,15 +472,27 @@ async function importPublicKey(keyId: string, serialized: string | undefined): P
 }
 
 export function canonicalReceiptMessage(event: LabEvent): string {
-  const criteriaHash = event.outcome.judge?.criteria_hash ?? "-";
   return [
     "batuta-receipt-v1",
     event.event_id,
     event.run_id,
+    event.project,
     String(event.order),
+    event.tool,
+    event.model,
+    event.skill ?? "-",
+    String(event.cost.amount),
+    event.cost.currency,
     event.outcome.status,
+    event.outcome.authority,
+    event.outcome.judge?.model ?? "-",
+    event.outcome.judge?.version ?? "-",
+    event.outcome.judge?.criteria_hash ?? "-",
+    event.receipt.issuer,
+    event.receipt.key_id,
+    event.receipt.algorithm,
+    event.receipt.signed_at,
     event.receipt.evidence_hash,
-    criteriaHash,
   ].join("\n");
 }
 

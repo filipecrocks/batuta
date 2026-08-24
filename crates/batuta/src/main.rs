@@ -12,6 +12,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().map(String::as_str).unwrap_or("help");
     let rest = &args[1.min(args.len())..];
+    warn_legacy_flags(rest);
     let exit_code = match command {
         "index" => cmd_index(rest),
         "indexar" => legacy("indexar", "index", || cmd_index(rest)),
@@ -80,6 +81,32 @@ available with deprecation warnings during the v0.x compatibility window.
 fn legacy<F: FnOnce() -> i32>(old: &str, new: &str, action: F) -> i32 {
     eprintln!("batuta: warning: '{old}' is deprecated; use '{new}'");
     action()
+}
+
+fn warn_legacy_flags(args: &[String]) {
+    const LEGACY_FLAGS: &[(&str, &str)] = &[
+        ("--modo", "--mode"),
+        ("--turn", "--turn-id"),
+        ("--turno", "--turn-id"),
+        ("--evento", "--event"),
+        ("--by", "--actor"),
+        ("--por", "--actor"),
+        ("--day", "--date"),
+        ("--dia", "--date"),
+        ("--erros", "--errors"),
+        ("--turnos", "--turns"),
+        ("--custo", "--cost"),
+        ("--versao", "--version"),
+        ("--fonte", "--source"),
+        ("--aplicar", "--apply"),
+    ];
+    for argument in args {
+        for (legacy, canonical) in LEGACY_FLAGS {
+            if argument == legacy || argument.starts_with(&format!("{legacy}=")) {
+                eprintln!("batuta: warning: '{legacy}' is deprecated; use '{canonical}'");
+            }
+        }
+    }
 }
 
 fn option(args: &[String], name: &str) -> Option<String> {
@@ -291,8 +318,11 @@ fn cmd_log(args: &[String]) -> i32 {
         .or_else(|| option(args, "--turn"))
         .or_else(|| option(args, "--turno"))
         .filter(|value| text::is_safe_correlation_id(value))
-        .or_else(route::fresh_turn_id)
-        .unwrap_or_else(|| "manual-unavailable".to_string());
+        .or_else(route::fresh_turn_id);
+    let Some(turn_id) = turn_id else {
+        eprintln!("batuta log: could not create a collision-safe turn ID");
+        return 1;
+    };
     let timestamp = index::now() as f64;
     let event = match event_type.as_str() {
         "activation" | "activate" | "ativacao" => {
@@ -308,6 +338,14 @@ fn cmd_log(args: &[String]) -> i32 {
                 .or_else(|| option(args, "--by"))
                 .or_else(|| option(args, "--por"))
                 .unwrap_or_else(|| "model".to_string());
+            let actor = match actor.as_str() {
+                "model" => "model",
+                "user" | "usuario" => "user",
+                _ => {
+                    eprintln!("batuta log: --actor must be 'model' or 'user'");
+                    return 2;
+                }
+            };
             object(vec![
                 ("schema", json_text("batuta.event.v2")),
                 ("v", number(2)),
@@ -425,6 +463,9 @@ fn cmd_conflicts() -> i32 {
 
 fn cmd_config(args: &[String]) -> i32 {
     let mut config = home::read_config();
+    if args.first().is_some_and(|key| key == "envio") {
+        eprintln!("batuta: warning: config key 'envio' is deprecated; use 'upload'");
+    }
     match (
         args.first().map(String::as_str),
         args.get(1).map(String::as_str),

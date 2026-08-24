@@ -238,7 +238,7 @@ async function main() {
   );
 }
 
-module.exports = { main: main, readTarGz: readTarGz, readZip: readZip };
+module.exports = { main: main, download: download, readTarGz: readTarGz, readZip: readZip };
 
 if (require.main === module) {
   main().catch(function (e) {

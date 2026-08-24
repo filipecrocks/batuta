@@ -298,8 +298,10 @@ begin
       coalesce((coalesce(skill->>'routes', skill->>'rotas'))::numeric, 0) as routes,
       coalesce((coalesce(skill->>'activations', skill->>'ativacoes'))::numeric, 0) as activations,
       coalesce((coalesce(skill->>'user_activations', skill->>'ativacoes_usuario'))::numeric, 0) as user_activations,
-      coalesce((coalesce(skill->>'judged_turns', skill->>'turns_judged', skill->>'turnos_julgados'))::numeric, 0) as judged_turns,
-      coalesce((coalesce(skill->>'successful_turns', skill->>'turns_ok', skill->>'turnos_ok'))::numeric, 0) as successful_turns,
+      -- A client aggregate is observational and cannot attest outcomes. Only
+      -- verified LAB receipts feed passed/failed metrics through lab_events.
+      0::numeric as judged_turns,
+      0::numeric as successful_turns,
       coalesce((skill->>'reprompts')::numeric, 0) as reprompts,
       coalesce((coalesce(skill->>'errors', skill->>'erros'))::numeric, 0) as errors,
       coalesce((skill->>'retries')::numeric, 0) as retries,
@@ -349,5 +351,8 @@ $$;
 revoke all on batuta.ingest_idempotency from public;
 revoke all on batuta.ingest_rate_windows from public;
 revoke all on batuta.lab_events from public;
+revoke all on function batuta.claim_ingest_request(text, text, text, text, integer) from public;
+revoke all on function batuta.complete_ingest_request(text, text, text, jsonb, integer) from public;
+revoke all on function batuta.fail_ingest_request(text, text, text) from public;
 
 commit;

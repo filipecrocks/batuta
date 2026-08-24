@@ -26,4 +26,4 @@ rustc --version --verbose
 cargo --version --verbose
 
 cd crates/batuta
-cargo test --release --locked --test conformidade c15_hot_path_stays_within_budget -- --exact --nocapture --test-threads=1
+cargo test --release --locked --test conformance c15_hot_path_fits_the_budget -- --exact --nocapture --test-threads=1

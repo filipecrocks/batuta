@@ -29,10 +29,23 @@ The runner signs the receipt over these newline-delimited UTF-8 fields:
 batuta-receipt-v1
 event_id
 run_id
+project
 order
+tool
+model
+skill-or--
+cost.amount
+cost.currency
 outcome.status
-receipt.evidence_hash
+outcome.authority
+judge.model-or--
+judge.version-or--
 judge.criteria_hash-or--
+receipt.issuer
+receipt.key_id
+receipt.algorithm
+receipt.signed_at
+receipt.evidence_hash
 ```
 
 It also signs the exact HTTP body:

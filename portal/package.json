@@ -10,7 +10,7 @@
     "dev": "node ../script/sync-content.mjs && next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --experimental-strip-types --test lib/*.test.mjs ../adapters/lab/*.test.mjs",
+    "test": "node --experimental-strip-types --test lib/*.test.mjs ../adapters/lab/*.test.mjs ../npm/*.test.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

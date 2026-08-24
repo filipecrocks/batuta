@@ -117,8 +117,8 @@ test("accepts the English daily summary and rejects inconsistent counts", () => 
     routes: 3,
     routes_with_suggestions: 2,
     holdout_routes: 1,
-    treatment_arm: { passed: 1, total: 1 },
-    holdout_arm: { passed: 0, total: 1 },
+    treatment_arm: { passed: 0, total: 0 },
+    holdout_arm: { passed: 0, total: 0 },
     declared_bias: "voluntary sample",
     measurement_disclaimer: "observational telemetry, not delivery proof",
     skills: [],
@@ -129,6 +129,9 @@ test("accepts the English daily summary and rejects inconsistent counts", () => 
   summary.routes_with_suggestions = 2;
   summary.date = "2026-02-31";
   assert.match(validateDailySummary(summary).errors.join("\n"), /existing UTC date/);
+  summary.date = "2026-08-24";
+  summary.treatment_arm = { passed: 1, total: 1 };
+  assert.match(validateDailySummary(summary).errors.join("\n"), /only verified LAB receipts/i);
 });
 
 test("verifies a detached runner receipt over evidence and verdict", async () => {
@@ -136,7 +139,7 @@ test("verifies a detached runner receipt over evidence and verdict", async () =>
   const event = baseEvent();
   event.receipt.signature = await sign(keys.privateKey, canonicalReceiptMessage(event));
   assert.equal(await verifyReceipt(event, keys.publicKeys), true);
-  event.outcome.status = "failed";
+  event.cost.amount = 99;
   assert.equal(await verifyReceipt(event, keys.publicKeys), false);
 });
 

@@ -118,6 +118,16 @@ fn h03_generated_turn_ids_are_unique_even_for_repeated_prompts() {
         let output = route::route("clean spreadsheet columns", "test", None, "0.0.0");
         assert!(ids.insert(output.event.field("turn_id").text().to_string()));
     }
+    let unsafe_id = route::route(
+        "clean spreadsheet columns",
+        "test",
+        Some("bad\ncorrelation".to_string()),
+        "0.0.0",
+    );
+    assert_ne!(unsafe_id.event.field("turn_id").text(), "bad\ncorrelation");
+    assert!(text::is_safe_correlation_id(
+        unsafe_id.event.field("turn_id").text()
+    ));
 }
 
 #[test]

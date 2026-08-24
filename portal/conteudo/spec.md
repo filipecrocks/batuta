@@ -62,14 +62,14 @@ and it avoids the gap down the road.
 The 400-term cap on the body is the second safety belt: BM25's `B=0.75` already
 penalizes long documents.
 
-### Index format — `~/.batuta/indice.txt`
+### Index format — `~/.batuta/index.txt`
 
 One line per record, not JSON. Measured reason: the hot path has a **full** 100ms
 budget, and only the `P` lines for the query's terms need to be opened. JSON would
 force parsing the whole file.
 
 ```
-BATUTA-INDICE 1
+BATUTA-INDEX 1
 G <generation epoch>
 N <number of skills>
 A <average document length>
@@ -124,21 +124,22 @@ The route event logs:
 |---|---|
 | `prompt_hash` | 32 hex chars of `sha256(local_salt ‖ 0x1F ‖ prompt)` |
 | `prompt_len` | character count |
-| `termos` | how many terms survived tokenization |
-| `holdout`, `modo`, `ms`, `sugestoes` | decision metadata |
+| `terms` | how many terms survived tokenization |
+| `holdout`, `mode`, `ms`, `suggestions` | decision metadata |
 
 **The prompt text is never logged or transmitted.** The salt is generated once,
-lives at `~/.batuta/sal` with 0600 permissions, and is **never sent** — without it,
+lives at `~/.batuta/salt` with 0600 permissions, and is **never sent** — without it,
 nobody can test a guessed prompt against the published hash.
 
 What gets uploaded (and only with explicit opt-in) is the **daily summary
-aggregated per skill**, schema `batuta.resumo_diario.v1` — never the raw event. 200
+aggregated per skill**, schema `batuta.daily_summary.v2` — never the raw event. 200
 turns/day become ~20 lines.
 
 ## 7. Network
 
 **The binary never touches the network. Ever.** The npm wrapper
-(`batuta registro atualizar`) is what downloads the public registry; the binary
+(`batuta registry update`; the deprecated Portuguese alias remains available) is
+what downloads the public registry; the binary
 only reads the cached file. This keeps the hot path auditable by inspection —
 there's no socket to review.
 
@@ -147,8 +148,8 @@ there's no socket to review.
 1. **`UserPromptSubmit` hook** — the primary one. Deterministic; stdout goes into
    the context; blocks the turn; a timeout discards the whole output. That's why
    the hook stays silent with exit code 0 whenever anything goes wrong.
-2. **MCP** — chat and Cowork, where there's no hook. The data is born tagged
-   `modo: degradado` (degraded mode).
+2. **MCP** — chat and Cowork, where there's no hook. The data is tagged
+   `mode: mcp`; downstream analysis treats it as a less complete observation.
 3. **Skill** — the weakest fallback.
 
 ## 9. The funnel
@@ -170,7 +171,7 @@ killing reprompts.
 
 ## 10. The battery
 
-`crates/batuta/tests/conformidade.rs`, 15 tests, run with `--test-threads=1`.
+`crates/batuta/tests/conformance.rs`, 15 tests. The corpus setup is concurrency-safe.
 
 | # | what it locks down |
 |---|---|

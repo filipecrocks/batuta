@@ -85,7 +85,12 @@ function validateInput(input) {
   const extras = Object.keys(input).filter((key) => !allowed.has(key));
   if (extras.length) throw new Error(`unknown input fields: ${extras.join(", ")}`);
   if (input.event_id !== undefined && !UUID_V7.test(input.event_id)) throw new Error("event_id must be a UUIDv7");
-  if (input.signed_at !== undefined && !Number.isFinite(Date.parse(input.signed_at))) {
+  if (
+    input.signed_at !== undefined &&
+    (typeof input.signed_at !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(input.signed_at) ||
+      !Number.isFinite(Date.parse(input.signed_at)))
+  ) {
     throw new Error("signed_at must be an ISO-8601 timestamp");
   }
   for (const field of ["run_id", "project", "tool", "model"]) assertId(input[field], field);
@@ -124,10 +129,23 @@ export function canonicalReceiptMessage(event) {
     "batuta-receipt-v1",
     event.event_id,
     event.run_id,
+    event.project,
     String(event.order),
+    event.tool,
+    event.model,
+    event.skill ?? "-",
+    String(event.cost.amount),
+    event.cost.currency,
     event.outcome.status,
-    event.receipt.evidence_hash,
+    event.outcome.authority,
+    event.outcome.judge?.model ?? "-",
+    event.outcome.judge?.version ?? "-",
     event.outcome.judge?.criteria_hash ?? "-",
+    event.receipt.issuer,
+    event.receipt.key_id,
+    event.receipt.algorithm,
+    event.receipt.signed_at,
+    event.receipt.evidence_hash,
   ].join("\n");
 }
 
