@@ -615,39 +615,36 @@ going and mention it later."
 
 ---
 
-## 5. Causal holdout
+## 5. Declared local holdout
 
-A skill that shows up alongside a good result shows correlation. To measure
-**causation**, someone needs to not receive the skill, without that depending on who
-the user is. That's the control group.
+A skill that shows up alongside a good result shows correlation. A holdout can
+eventually support causal measurement, but the current local/fleet event does not:
+its assignment is not preregistered and signed before execution.
 
 **How it works.** On **5% of turns**, chosen by random draw at the moment of the
 turn, the router **stays silent on purpose**: it doesn't propose any skill, even with a
-clear match. The turn is marked `holdout: true` in the event and enters the dataset as
-a control.
+clear match. The turn is marked `holdout: true` in the owner-private local event as
+a declared routing observation.
 
 **Conditions, all mandatory:**
 
 1. **Declared right to the user's face.** One sentence on first run, not hidden
    in documentation: *"On 5% of turns Batuta stays quiet on purpose, to measure
    whether the skill actually helps. That's what makes the number honest. You can
-   change the percentage or turn it off in `~/.batuta/config.json`."*
-2. **Configurable.** `holdout_pct` accepts any value from 0 to 100.
+   change the percentage or turn it off in `~/.batuta/config.txt`."*
+2. **Configurable.** `holdout_pct` accepts any value from 0 to 50.
 3. **Can be turned off.** `holdout_pct = 0` turns it off, and turning it off degrades
    nothing besides the holdout itself.
-4. **Marked in the data.** Every holdout turn gets uploaded marked as such. A
-   holdout turn that isn't marked is corrupted data.
+4. **Marked locally.** Every holdout turn is marked in `events.jsonl`. This release
+   has no public uploader.
 5. **Never silent.** A hidden experiment destroys the project — it's item 1 of the
    declared risks. If the disclosure doesn't fit in the interface, the holdout doesn't run.
 
 **Configuration:**
 
-```json
-{
-  "holdout_pct": 5,
-  "holdout_semente": "por-instalacao, gerada localmente",
-  "holdout_declarado_em": "primeira execucao"
-}
+```text
+holdout_pct=5
+informed=yes
 ```
 
 **In Batuta Zero, the holdout stays off** (`manifesto.json`, field
@@ -655,10 +652,10 @@ a control.
 arms are the control. The holdout exists for the fleet, where there's no way to ask
 each user to run the task twice.
 
-**How to read the number.** Within the same install, same usage profile, and same
-time window, the outcome of `holdout: true` turns is compared against the outcome of
-turns where the router spoke up. The difference is attributable to routing, not to the
-type of user — which is exactly what a between-user comparison can't tell you.
+**How to read the number today.** Arm counts are descriptive only. Attribution to
+routing requires a future assignment receipt committed before execution, stable
+randomization, and linkage to the blind independent judge's signed verdict. Batuta
+must not label the current difference as causal lift.
 
 ---
 

@@ -1,8 +1,9 @@
 # Batuta
 
-**The open measurement layer for Agent Skills.** Measures whether a skill actually
-works, at what cost, and on which model — and publishes everything, immutable,
-zero-profit.
+**The open measurement layer for Agent Skills.** Records privacy-minimized
+observations about whether a skill works, at what cost, and on which model.
+Curated benchmark releases can be published in a verifiable hash chain; the live
+database is mutable operational storage, not an immutable source of truth.
 
 It is not the 27th router on the market. Batuta is an **observability and
 measurement layer** that works with any router. It is never the sole proof that
@@ -31,9 +32,9 @@ batuta install-hooks
 
 After a few turns: `batuta report`.
 
-**Nothing leaves your machine.** The report works 100% offline; sending aggregated
-data is explicit opt-in. See [what gets logged](https://batuta.space/privacidade) or
-run `batuta privacy`.
+**Nothing leaves your machine.** The report and daily-summary preview work 100%
+offline. This release has no public uploader or signing-key enrollment. See
+[what gets logged](https://batuta.space/privacidade) or run `batuta privacy`.
 
 > **npm safety:** the unscoped `batuta` package on npm belongs to an unrelated
 > publisher. Do not install it. The wrapper in this repository is intentionally
@@ -86,7 +87,8 @@ Details on each: [MANIFESTO.md](MANIFESTO.md) and [SPEC.md](SPEC.md).
 
 What's worth more than code, in this order:
 
-1. **Install it and turn on submission** — sample size is the scarce input, not money.
+1. **Install it and inspect the local report** — do not send data until a public,
+   authenticated enrollment and retention/deletion flow is released.
 2. **Send a real task** to the [arena](https://batuta.space/arena).
 3. **Run the Batuta Zero protocol** and publish the raw output.
 4. **Find a flaw in the method** and open an issue. Credibility is the only product.
@@ -99,7 +101,7 @@ numbers.
 
 ```sh
 cd crates/batuta
-cargo test --locked --all-features
+cargo test --locked --all-features -- --test-threads=1
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo fmt --check
 ```

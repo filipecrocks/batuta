@@ -98,6 +98,43 @@ export type RankingRow = {
   days: number;
 };
 
+function finiteNumber(value: unknown, field: string, nullable = false): number | null {
+  if (nullable && value === null) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed) || Math.abs(parsed) > Number.MAX_SAFE_INTEGER) {
+    throw new Error(`database returned an unsafe ${field}`);
+  }
+  return parsed;
+}
+
+/** Neon/PostgreSQL intentionally returns int8/numeric values as strings. Keep
+ * that driver boundary out of UI code and reject values JavaScript cannot
+ * represent exactly. */
+export function normalizeRankingRow(row: Record<string, unknown>): RankingRow {
+  return {
+    skill: String(row.skill),
+    routes: finiteNumber(row.routes, "routes")!,
+    activations: finiteNumber(row.activations, "activations")!,
+    user_activations: finiteNumber(row.user_activations, "user_activations")!,
+    turns_judged: finiteNumber(row.turns_judged, "turns_judged")!,
+    turns_ok: finiteNumber(row.turns_ok, "turns_ok")!,
+    reprompts: finiteNumber(row.reprompts, "reprompts")!,
+    errors: finiteNumber(row.errors, "errors")!,
+    retries: finiteNumber(row.retries, "retries")!,
+    cost_usd: finiteNumber(row.cost_usd, "cost_usd")!,
+    trigger_rate: finiteNumber(row.trigger_rate, "trigger_rate", true),
+    ok_rate: finiteNumber(row.ok_rate, "ok_rate", true),
+    cost_per_task: finiteNumber(row.cost_per_task, "cost_per_task", true),
+    median_turns_to_completion: finiteNumber(
+      row.median_turns_to_completion,
+      "median_turns_to_completion",
+      true,
+    ),
+    installations: finiteNumber(row.installations, "installations")!,
+    days: finiteNumber(row.days, "days")!,
+  };
+}
+
 /**
  * Skill ranking over a window of days.
  *
@@ -106,7 +143,7 @@ export type RankingRow = {
  * mistake the project accuses others of (§2). The default is 3 — low, but
  * explicit, and the page has to state where the cutoff was.
  */
-export function skillRanking(options?: {
+export async function skillRanking(options?: {
   days?: number;
   limit?: number;
   minInstallations?: number;
@@ -114,36 +151,75 @@ export function skillRanking(options?: {
   const days = options?.days ?? 30;
   const limit = options?.limit ?? 50;
   const minInst = options?.minInstallations ?? 3;
-  return safe("skillRanking", () => sql<RankingRow>`
+  if (!Number.isSafeInteger(days) || days < 1 || days > 366) {
+    throw new Error("days must be an integer between 1 and 366");
+  }
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+    throw new Error("limit must be an integer between 1 and 500");
+  }
+  if (!Number.isSafeInteger(minInst) || minInst < 1 || minInst > 1_000_000) {
+    throw new Error("minInstallations must be an integer between 1 and 1000000");
+  }
+  const rows = await safe("skillRanking", () => sql<Record<string, unknown>>`
+    with observed as (
+      select
+        skill,
+        sum(routes)::bigint as routes,
+        sum(activations)::bigint as activations,
+        sum(user_activations)::bigint as user_activations,
+        sum(reprompts)::bigint as reprompts,
+        sum(errors)::bigint as errors,
+        sum(retries)::bigint as retries,
+        avg(median_turns_to_completion) as median_turns_to_completion,
+        max(installations) as installations,
+        count(*)::int as days
+      from batuta.skill_day_metrics
+      where day > (now() at time zone 'UTC')::date - ${days}::int
+      group by skill
+      having max(installations) >= ${minInst}::int
+    ), trusted as (
+      select
+        skill,
+        sum(turns_judged)::bigint as turns_judged,
+        sum(turns_ok)::bigint as turns_ok,
+        sum(cost_usd) as cost_usd
+      from batuta.lab_skill_day_metrics
+      where date > (now() at time zone 'UTC')::date - ${days}::int
+      group by skill
+    )
     select
-      skill,
-      sum(routes)::bigint              as routes,
-      sum(activations)::bigint         as activations,
-      sum(user_activations)::bigint    as user_activations,
-      sum(turns_judged)::bigint        as turns_judged,
-      sum(turns_ok)::bigint            as turns_ok,
-      sum(reprompts)::bigint           as reprompts,
-      sum(errors)::bigint              as errors,
-      sum(retries)::bigint             as retries,
-      sum(cost_usd)                    as cost_usd,
-      case when sum(routes) > 0
-           then sum(activations)::float8 / sum(routes) end        as trigger_rate,
-      case when sum(turns_judged) > 0
-           then sum(turns_ok)::float8 / sum(turns_judged) end as ok_rate,
-      case when sum(turns_ok) > 0
-           then sum(cost_usd) / sum(turns_ok) end            as cost_per_task,
-      avg(median_turns_to_completion)  as median_turns_to_completion,
-      -- max, not sum: the same installation shows up on multiple days of the window,
-      -- and summing would turn 1 loyal user into 30 users
-      max(installations)               as installations,
-      count(*)::int                    as days
-    from batuta.skill_day_metrics
-    where day >= current_date - ${days}::int
-    group by skill
-    having max(installations) >= ${minInst}::int
-    order by routes desc, skill asc
+      observed.skill,
+      observed.routes,
+      observed.activations,
+      observed.user_activations,
+      coalesce(trusted.turns_judged, 0)::bigint as turns_judged,
+      coalesce(trusted.turns_ok, 0)::bigint as turns_ok,
+      observed.reprompts,
+      observed.errors,
+      observed.retries,
+      coalesce(trusted.cost_usd, 0) as cost_usd,
+      case when observed.routes > 0
+           then observed.activations::float8 / observed.routes end as trigger_rate,
+      case when trusted.turns_judged > 0
+           then trusted.turns_ok::float8 / trusted.turns_judged end as ok_rate,
+      case when trusted.turns_ok > 0
+           then trusted.cost_usd / trusted.turns_ok end as cost_per_task,
+      observed.median_turns_to_completion,
+      observed.installations,
+      observed.days
+    from observed
+    left join trusted using (skill)
+    order by observed.routes desc, observed.skill asc
     limit ${limit}::int
   `);
+  return rows.flatMap((row) => {
+    try {
+      return [normalizeRankingRow(row)];
+    } catch (error) {
+      console.error("[batuta] discarded unsafe ranking row:", error);
+      return [];
+    }
+  });
 }
 
 // ==================================================================== recipes
@@ -210,10 +286,7 @@ export type ArenaTask = {
 /**
  * Arena queue with vote counts.
  *
- * Never selects `contact`. The contact only serves to notify whoever
- * submitted it when the task runs; there's no reason for it to travel to a third
- * party's browser, and the cheapest way to guarantee that is for it to not be in
- * the query.
+ * The public arena does not collect or store contact details.
  *
  * The order is by vote, and vote orders THE QUEUE. The test result doesn't look at
  * this column (§1.6, §10).

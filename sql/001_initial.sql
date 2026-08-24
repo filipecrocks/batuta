@@ -61,7 +61,7 @@ create table if not exists batuta.daily_summaries (
   primary key (installation_id, day)
 );
 
-comment on column batuta.daily_summaries.hash is 'sha256 of the payload in canonical JSON (alphabetical keys, no spaces — same as Rust''s json::write). Lets the sender verify that what arrived is byte for byte what they sent.';
+comment on column batuta.daily_summaries.hash is 'sha256 of the exact authenticated HTTP request body. Lets the sender verify that what arrived is byte for byte what they sent.';
 
 create index if not exists daily_summaries_day_idx        on batuta.daily_summaries (day desc);
 create index if not exists daily_summaries_received_idx   on batuta.daily_summaries (received_at desc);
@@ -164,15 +164,19 @@ create table if not exists batuta.tasks (
   complexity           text,
   status               batuta.task_status not null default 'screening',
   source               text        not null default 'public',
-  -- contact is optional and serves one purpose only: notifying whoever submitted
-  -- the task when it runs. It doesn't become a mailing list, a newsletter, or a login.
-  contact              text,
+  submission_key       text,
+  submission_hash      text,
   created_at           timestamptz not null default now(),
   constraint tasks_category_ck check (
     category is null or category in ('code','writing','data','documents','research','automation')
   ),
   constraint tasks_complexity_ck check (
     complexity is null or complexity in ('simple','medium','complex')
+  ),
+  constraint tasks_submission_identity_ck check (
+    (submission_key is null and submission_hash is null)
+    or (submission_key ~ '^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{7,159}$'
+      and submission_hash ~ '^[0-9a-f]{64}$')
   ),
   -- status only advances past canonization if a canonical statement and
   -- acceptance criteria both exist. The database enforces the rule that a rush
@@ -182,6 +186,8 @@ create table if not exists batuta.tasks (
     or (canonical_statement is not null and acceptance_criteria is not null)
   )
 );
+create unique index if not exists tasks_submission_key_unique
+  on batuta.tasks (submission_key) where submission_key is not null;
 
 create index if not exists tasks_status_idx on batuta.tasks (status, created_at desc);
 
@@ -327,28 +333,29 @@ begin
 
   with rows as (
     select
-      r.installation_id,
-      s->>'skill'                                                as skill,
-      coalesce((s->>'routes')::numeric, 0)                       as routes,
-      coalesce((s->>'activations')::numeric, 0)                  as activations,
-      coalesce((s->>'user_activations')::numeric, 0)             as user_activations,
-      coalesce((s->>'turns_judged')::numeric, 0)                 as turns_judged,
-      coalesce((s->>'turns_ok')::numeric, 0)                     as turns_ok,
-      coalesce((s->>'reprompts')::numeric, 0)                    as reprompts,
-      coalesce((s->>'errors')::numeric, 0)                       as errors,
-      coalesce((s->>'retries')::numeric, 0)                      as retries,
-      coalesce((s->>'tokens_in')::double precision, 0)           as tokens_in,
-      coalesce((s->>'tokens_out')::double precision, 0)          as tokens_out,
-      coalesce((s->>'cost_usd')::numeric, 0)                     as cost_usd,
-      coalesce((s->>'median_turns_to_completion')::double precision, 0) as median
-    from batuta.daily_summaries r
+      summary.installation_id,
+      skill->>'skill' as skill,
+      coalesce((coalesce(skill->>'routes', skill->>'rotas'))::numeric, 0) as routes,
+      coalesce((coalesce(skill->>'activations', skill->>'ativacoes'))::numeric, 0) as activations,
+      coalesce((coalesce(skill->>'user_activations', skill->>'ativacoes_usuario'))::numeric, 0) as user_activations,
+      -- Client aggregates never establish independently judged outcomes.
+      0::numeric as turns_judged,
+      0::numeric as turns_ok,
+      coalesce((skill->>'reprompts')::numeric, 0) as reprompts,
+      coalesce((coalesce(skill->>'errors', skill->>'erros'))::numeric, 0) as errors,
+      coalesce((skill->>'retries')::numeric, 0) as retries,
+      coalesce((skill->>'tokens_in')::double precision, 0) as tokens_in,
+      coalesce((skill->>'tokens_out')::double precision, 0) as tokens_out,
+      coalesce((coalesce(skill->>'cost_usd', skill->>'custo_usd'))::numeric, 0) as cost_usd,
+      coalesce((coalesce(skill->>'median_turns_to_finish', skill->>'median_turns_to_completion', skill->>'turnos_ate_fim_mediana'))::double precision, 0) as median
+    from batuta.daily_summaries summary
     cross join lateral jsonb_array_elements(
-      case when jsonb_typeof(r.payload->'skills') = 'array'
-           then r.payload->'skills'
+      case when jsonb_typeof(summary.payload->'skills') = 'array'
+           then summary.payload->'skills'
            else '[]'::jsonb end
-    ) as s
-    where r.day = p_day
-      and coalesce(s->>'skill', '') <> ''
+    ) as skill
+    where summary.day = p_day
+      and coalesce(skill->>'skill', '') <> ''
   )
   insert into batuta.skill_day_metrics (
     skill, day, routes, activations, user_activations, turns_judged, turns_ok,
@@ -358,14 +365,14 @@ begin
   select
     skill,
     p_day,
-    sum(routes)::bigint,
-    sum(activations)::bigint,
-    sum(user_activations)::bigint,
-    sum(turns_judged)::bigint,
-    sum(turns_ok)::bigint,
-    sum(reprompts)::bigint,
-    sum(errors)::bigint,
-    sum(retries)::bigint,
+    least(sum(routes), 9223372036854775807)::bigint,
+    least(sum(activations), 9223372036854775807)::bigint,
+    least(sum(user_activations), 9223372036854775807)::bigint,
+    least(sum(turns_judged), 9223372036854775807)::bigint,
+    least(sum(turns_ok), 9223372036854775807)::bigint,
+    least(sum(reprompts), 9223372036854775807)::bigint,
+    least(sum(errors), 9223372036854775807)::bigint,
+    least(sum(retries), 9223372036854775807)::bigint,
     sum(tokens_in),
     sum(tokens_out),
     sum(cost_usd),

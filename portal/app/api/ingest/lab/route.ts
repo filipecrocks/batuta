@@ -11,6 +11,7 @@ import {
   findForbiddenKey,
   readLimitedUtf8Body,
   validateLabEvent,
+  verifyJudgeAttestation,
   verifyReceipt,
   verifySignedRequest,
 } from "../../../../lib/ingest";
@@ -19,6 +20,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 256 * 1024;
+const INGEST_KIND = "lab_event" as const;
 
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -62,46 +64,75 @@ export async function POST(request: Request) {
   const signed = await verifySignedRequest(
     rawBody,
     request.headers,
-    process.env.BATUTA_INGEST_PUBLIC_KEYS,
+    process.env.BATUTA_RUNNER_PUBLIC_KEYS,
   );
   if (!signed.ok) return response({ ok: false, error: signed.error }, 401);
   const verifiedRequest = signed as VerifiedRequest;
 
-  let untrusted: unknown;
-  try {
-    untrusted = JSON.parse(rawBody);
-  } catch {
-    return response({ ok: false, error: "body is not valid JSON" }, 400);
-  }
-  const forbidden = findForbiddenKey(untrusted);
-  if (forbidden) return response({ ok: false, error: `privacy-forbidden key at ${forbidden}` }, 400);
-  const validationErrors = validateLabEvent(untrusted);
-  if (validationErrors.length) {
-    return response(
-      { ok: false, error: "body does not match batuta.lab_event.v1", problems: validationErrors.slice(0, 25) },
-      422,
-    );
-  }
-  const event = untrusted as LabEvent;
-  if (event.receipt.key_id !== verifiedRequest.keyId) {
-    return response({ ok: false, error: "receipt key_id must match authenticated request key" }, 401);
-  }
-  if (!(await verifyReceipt(event, process.env.BATUTA_INGEST_PUBLIC_KEYS))) {
-    return response({ ok: false, error: "runner receipt signature verification failed" }, 401);
-  }
   let claimed = false;
   try {
-    const claim = await claimIngestRequest(verifiedRequest, "lab_event");
+    // Claim immediately after authentication so malformed signed traffic is
+    // subject to the same per-key rate budget as accepted observations.
+    const claim = await claimIngestRequest(verifiedRequest, INGEST_KIND);
     const early = claimResponse(claim);
     if (early) return early;
     claimed = true;
 
+    let untrusted: unknown;
+    try {
+      untrusted = JSON.parse(rawBody);
+    } catch {
+      await failIngestRequest(verifiedRequest, INGEST_KIND);
+      claimed = false;
+      return response({ ok: false, error: "body is not valid JSON" }, 400);
+    }
+    const forbidden = findForbiddenKey(untrusted);
+    if (forbidden) {
+      await failIngestRequest(verifiedRequest, INGEST_KIND);
+      claimed = false;
+      return response({ ok: false, error: `privacy-forbidden key at ${forbidden}` }, 400);
+    }
+    const validationErrors = validateLabEvent(untrusted);
+    if (validationErrors.length) {
+      await failIngestRequest(verifiedRequest, INGEST_KIND);
+      claimed = false;
+      return response(
+        { ok: false, error: "body does not match batuta.lab_event.v1", problems: validationErrors.slice(0, 25) },
+        422,
+      );
+    }
+    const event = untrusted as LabEvent;
+    if (event.receipt.key_id !== verifiedRequest.keyId) {
+      await failIngestRequest(verifiedRequest, INGEST_KIND);
+      claimed = false;
+      return response({ ok: false, error: "receipt key_id must match authenticated request key" }, 401);
+    }
+    if (!(await verifyReceipt(event, process.env.BATUTA_RUNNER_PUBLIC_KEYS))) {
+      await failIngestRequest(verifiedRequest, INGEST_KIND);
+      claimed = false;
+      return response({ ok: false, error: "runner receipt signature verification failed" }, 401);
+    }
+    if (
+      event.outcome.status !== "unknown" &&
+      !(await verifyJudgeAttestation(
+        event,
+        process.env.BATUTA_JUDGE_PUBLIC_KEYS,
+        process.env.BATUTA_RUNNER_PUBLIC_KEYS,
+      ))
+    ) {
+      await failIngestRequest(verifiedRequest, INGEST_KIND);
+      claimed = false;
+      return response({ ok: false, error: "independent judge attestation verification failed" }, 401);
+    }
+
     const judge = event.outcome.judge;
     const inserted = await sql<{ event_id: string }>`
       insert into batuta.lab_events (
-        event_id, run_id, project, event_order, tool, model, skill, cost_usd,
+        event_id, run_id, project, event_order, tool, model, skill,
+        routing_arm, holdout_declared, cost_usd,
         outcome_status, outcome_authority, judge_model, judge_version,
-        judge_criteria_hash, runner_receipt, signer_key_id, signed_request_at,
+        judge_criteria_hash, judge_issuer, judge_key_id, judge_signed_at,
+        judge_signature, runner_receipt, signer_key_id, signed_request_at,
         request_signature, request_hash, payload
       ) values (
         ${event.event_id}::uuid,
@@ -111,12 +142,18 @@ export async function POST(request: Request) {
         ${event.tool},
         ${event.model},
         ${event.skill},
+        ${event.routing.arm},
+        ${event.routing.holdout_declared},
         ${event.cost.amount},
         ${event.outcome.status},
         ${event.outcome.authority},
         ${judge?.model ?? null},
         ${judge?.version ?? null},
         ${judge?.criteria_hash ?? null},
+        ${judge?.attestation.issuer ?? null},
+        ${judge?.attestation.key_id ?? null},
+        ${judge?.attestation.signed_at ?? null}::timestamptz,
+        ${judge?.attestation.signature ?? null},
         ${JSON.stringify(event.receipt)}::jsonb,
         ${verifiedRequest.keyId},
         to_timestamp(${verifiedRequest.timestamp}),
@@ -133,11 +170,13 @@ export async function POST(request: Request) {
         select request_hash
         from batuta.lab_events
         where event_id = ${event.event_id}::uuid
-           or (run_id = ${event.run_id} and event_order = ${event.order})
+           or (signer_key_id = ${verifiedRequest.keyId} and project = ${event.project}
+             and run_id = ${event.run_id} and event_order = ${event.order})
         limit 1
       `;
       if (existing[0]?.request_hash !== verifiedRequest.requestHash) {
-        await failIngestRequest(verifiedRequest);
+        await failIngestRequest(verifiedRequest, INGEST_KIND);
+        claimed = false;
         return response({ ok: false, error: "event identity conflicts with a different payload" }, 409);
       }
     }
@@ -151,7 +190,7 @@ export async function POST(request: Request) {
       measurement_disclaimer:
         "Batuta recorded observational telemetry. This response is not proof of delivery; the evidence receipt was issued by the trusted runner and the verdict by an independent judge.",
     };
-    await completeIngestRequest(verifiedRequest, body, 202);
+    await completeIngestRequest(verifiedRequest, INGEST_KIND, body, 202);
     console.info(
       JSON.stringify({
         event: "lab_ingest_observed",
@@ -166,7 +205,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (claimed) {
       try {
-        await failIngestRequest(verifiedRequest);
+        await failIngestRequest(verifiedRequest, INGEST_KIND);
       } catch {
         // Preserve the original failure; a stale claim is safely reclaimable.
       }

@@ -1,16 +1,16 @@
 export const metadata = {
   title: "Instalar",
-  description: "Três caminhos, trinta segundos. Nada sai da sua máquina até você mandar.",
+  description: "Instalação verificada por checksum e proveniência. O binário permanece offline.",
 };
 
 export default function Instalar() {
   return (
     <section className="faixa" style={{ paddingTop: "3rem" }}>
       <div className="centro">
-        <p className="olho">trinta segundos</p>
+        <p className="olho">checksum e proveniência antes de instalar</p>
         <h1>Instalar</h1>
         <p className="linha-fina">
-          O Batuta é um binário de uns 600 KB, sem dependência, que não acessa a rede.
+          O Batuta é um binário Rust sem dependências de terceiros e não acessa a rede.
         </p>
 
         <h3>caminho 1 — curl</h3>
@@ -20,7 +20,9 @@ export default function Instalar() {
         <p className="miudo">
           O script detecta seu sistema, baixa o binário da última release do GitHub e{" "}
           <strong>confere o SHA256</strong> contra o{" "}
-          <span className="mono">SHA256SUMS</span> da release. Se não bater, não instala.
+          <span className="mono">SHA256SUMS</span> da release e verifica a atestação de
+          proveniência do GitHub. Se não bater, não instala. O GitHub CLI
+          (<span className="mono">gh</span>) precisa estar instalado.
         </p>
 
         <h3>caminho 2 — npm (ainda indisponível)</h3>
@@ -70,11 +72,11 @@ batuta route "minha planilha veio bagunçada, preciso limpar as colunas"`}</code
         <h2>Desinstalar</h2>
         <pre>
           <code>{`rm -f ~/.local/bin/batuta   # ou /usr/local/bin/batuta
-rm -rf ~/.batuta            # apaga índice, eventos, sal e config`}</code>
+rm -rf ~/.batuta            # apaga índice, eventos, salt e config`}</code>
         </pre>
 
         <p>
-          <a href="/privacidade">O que fica guardado e o que sobe →</a>
+          <a href="/privacidade">O que fica guardado e como funciona a API controlada →</a>
         </p>
       </div>
     </section>

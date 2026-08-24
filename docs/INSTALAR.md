@@ -6,14 +6,23 @@
 curl -fsSL https://batuta.space/install.sh | sh
 ```
 
-Pin a version with `BATUTA_VERSION=v0.1.0`; choose a destination with
-`BATUTA_DEST=/opt/bin`. The installer downloads the matching GitHub release,
-verifies it against that release's `SHA256SUMS`, and only then performs the final
-write. The release workflow builds static musl binaries for Linux and publishes
-checksums and GitHub build-provenance attestations for every archive.
+Pin a version or choose a destination by applying the environment to the shell
+on the right side of the pipe:
 
-On Windows, download the matching `.zip` and `SHA256SUMS` from the GitHub release,
-verify it with `Get-FileHash -Algorithm SHA256`, then place `batuta.exe` on `PATH`.
+```sh
+curl -fsSL https://batuta.space/install.sh | BATUTA_VERSION=v0.1.0 sh
+curl -fsSL https://batuta.space/install.sh | BATUTA_DEST=/opt/bin sh
+```
+
+The installer downloads the matching GitHub release,
+verifies it against that release's `SHA256SUMS`, and only then performs the final
+write. GitHub CLI (`gh`) is required: the installer also verifies the archive's
+GitHub build-provenance attestation. The release workflow builds static musl
+binaries for Linux and publishes checksums and provenance for every archive.
+
+Windows binaries are not published yet because Batuta has not implemented and
+verified owner-only NTFS ACLs for its private state. The CLI fails closed on
+platforms where that guarantee cannot be enforced.
 
 ## npm status — do not use the unscoped package
 
@@ -43,7 +52,8 @@ batuta report
 batuta privacy
 ```
 
-The installer does not enable upload. Local state is stored in `BATUTA_HOME` or
+This release has no public uploader or signing-key enrollment; `batuta summary`
+is a local preview only. Local state is stored in `BATUTA_HOME` or
 `$HOME/.batuta`; the legacy `BATUTA_CASA` variable remains supported during the
 v0.x compatibility window. Directories are owner-only and state files are
 written atomically with owner-only permissions.

@@ -9,6 +9,7 @@ use crate::home;
 use crate::json::{self, number, object, text, Value};
 use crate::storage;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::io;
 use std::path::PathBuf;
 
@@ -17,17 +18,15 @@ pub fn events_file() -> PathBuf {
 }
 
 pub fn append(value: &Value) -> io::Result<()> {
-    storage::append_line(&events_file(), json::write(value).as_bytes())
+    let path = home::ensure()?.join("events.jsonl");
+    storage::append_line(&path, json::write(value).as_bytes())
 }
 
 pub fn load() -> Vec<Value> {
     let mut events = Vec::new();
     // Preserve data written by v0 Portuguese builds during an in-place upgrade.
-    for path in [
-        home::app_dir().join("eventos.jsonl"),
-        home::app_dir().join("events.jsonl"),
-    ] {
-        let Ok(contents) = std::fs::read_to_string(path) else {
+    for path in ["eventos.jsonl", "events.jsonl"] {
+        let Ok(contents) = home::read_state_file(path) else {
             continue;
         };
         events.extend(
@@ -112,6 +111,7 @@ fn authoritative_outcome(_event: &Value) -> bool {
 pub fn aggregate(events: &[Value], day: Option<&str>) -> Aggregate {
     let mut aggregate = Aggregate::default();
     let mut turns: BTreeMap<String, (bool, bool, Vec<String>)> = BTreeMap::new();
+    let mut seen_transitions: BTreeSet<(String, String, String)> = BTreeSet::new();
     for event in events {
         let timestamp = event.field("t").number() as u64;
         if day.is_some_and(|expected| data::day_utc(timestamp) != expected) {
@@ -121,7 +121,23 @@ pub fn aggregate(events: &[Value], day: Option<&str>) -> Aggregate {
             aggregate.first = timestamp;
         }
         aggregate.last = aggregate.last.max(timestamp);
-        match event_type(event) {
+        let kind = event_type(event);
+        let correlation = turn_id(event);
+        let transition_skill = field_text(event, "skill", "habilidade");
+        if !correlation.is_empty()
+            && matches!(
+                kind,
+                "route" | "rota" | "activation" | "ativacao" | "outcome" | "resultado"
+            )
+            && !seen_transitions.insert((
+                kind.to_string(),
+                correlation.to_string(),
+                transition_skill.to_string(),
+            ))
+        {
+            continue;
+        }
+        match kind {
             "route" | "rota" => {
                 aggregate.routes += 1;
                 let holdout = matches!(event.field("holdout"), Value::Bool(true));
@@ -163,7 +179,10 @@ pub fn aggregate(events: &[Value], day: Option<&str>) -> Aggregate {
             }
             "activation" | "ativacao" => {
                 let skill = field_text(event, "skill", "habilidade");
-                if skill.is_empty() {
+                let Some((_, _, suggested)) = turns.get(correlation) else {
+                    continue;
+                };
+                if skill.is_empty() || !suggested.iter().any(|candidate| candidate == skill) {
                     continue;
                 }
                 let target = aggregate.skills.entry(skill.to_string()).or_default();
@@ -250,7 +269,7 @@ pub fn pct(numerator: u64, denominator: u64) -> f64 {
     }
 }
 
-/// The only local format eligible for upload, and only after explicit opt-in.
+/// Privacy-minimized local preview. This release has no public uploader.
 pub fn daily_summary(aggregate: &Aggregate, date: &str, batuta_version: &str, mode: &str) -> Value {
     let skills = aggregate
         .skills

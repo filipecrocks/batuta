@@ -3,8 +3,8 @@
 ## One sentence
 
 Batuta is the **open measurement layer for Agent Skills**: it measures whether a
-skill actually works, at what cost, on which model — and publishes everything,
-immutable, zero-profit.
+skill actually works, at what cost, on which model. Local observations stay
+local; curated releases enter a verifiable hash chain. Zero-profit.
 
 It's not the 27th router on the market. It's **the judge** — and it works with any
 router.
@@ -49,9 +49,10 @@ Every donation and every expense is public. Every published result is immutable
 and verifiable by anyone.
 
 **3. Privacy.**
-The prompt **never** leaves your machine — only a hash with a local salt, length,
-and identifiers. Sending data is explicit opt-in. The local report works 100%
-offline: the value Batuta gives you isn't held hostage by the upload.
+The prompt **never** leaves your machine. This release stores a salted hash,
+length, and identifiers locally and has no public uploader. The local report works
+100% offline; future collection requires authenticated enrollment, retention, and
+deletion rules before it can be offered.
 
 **4. No conflict of interest.**
 We don't sell skills, we don't sell models, we don't sell SaaS. The number has no

@@ -96,13 +96,9 @@ pub fn find(query: &str) -> String {
     // ---- 1. installed
     s.push_str("INSTALLED — already on your machine\n");
     let mut found_local = false;
-    let canonical_index = home::app_dir().join("index.txt");
-    let local_index = if canonical_index.is_file() {
-        canonical_index
-    } else {
-        home::app_dir().join("indice.txt")
-    };
-    if let Ok(raw) = std::fs::read_to_string(local_index) {
+    if let Ok(raw) =
+        home::read_state_file("index.txt").or_else(|_| home::read_state_file("indice.txt"))
+    {
         let idx = index::read_partial(&raw, &terms);
         let matches = bm25::score(&idx, &terms);
         for a in &matches {
@@ -113,7 +109,7 @@ pub fn find(query: &str) -> String {
                     sk.name,
                     a.score,
                     shorten(&sk.description, 120),
-                    sk.path
+                    sanitize_external(&sk.path)
                 ));
             }
         }
@@ -127,7 +123,8 @@ pub fn find(query: &str) -> String {
     // ---- 2. available
     s.push_str("\nAVAILABLE — exists in the public registry\n");
     let mut found_registry = false;
-    match std::fs::read_to_string(registry_path()) {
+    match home::read_state_file("registry.json").or_else(|_| home::read_state_file("registro.json"))
+    {
         Ok(raw) => match json::read(&raw) {
             Ok(v) => {
                 let (idx, originals) = index_from_registry(&v);
@@ -154,7 +151,7 @@ pub fn find(query: &str) -> String {
                         a.score,
                         shorten(&sk.description, 120),
                         summary,
-                        sk.path
+                        sanitize_external(&sk.path)
                     ));
                 }
                 if !found_registry {
@@ -185,20 +182,33 @@ pub fn find(query: &str) -> String {
 }
 
 fn shorten(s: &str, n: usize) -> String {
-    let safe: String = s
-        .chars()
-        .map(|character| {
-            if character.is_control() {
-                ' '
-            } else {
-                character
-            }
-        })
-        .collect();
+    let safe = sanitize_external(s);
     let c: Vec<char> = safe.chars().collect();
     if c.len() <= n {
         safe
     } else {
         c[..n].iter().collect::<String>() + "…"
     }
+}
+
+fn sanitize_external(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_control()
+                || matches!(
+                    character,
+                    '\u{061c}'
+                        | '\u{200e}'
+                        | '\u{200f}'
+                        | '\u{202a}'..='\u{202e}'
+                        | '\u{2066}'..='\u{2069}'
+                )
+            {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect()
 }

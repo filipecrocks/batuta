@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canonicalJudgeMessage,
   canonicalReceiptMessage,
   findForbiddenKey,
   readLimitedUtf8Body,
   validateLabEvent,
   validateDailySummary,
   verifyReceipt,
+  verifyJudgeAttestation,
   verifySignedRequest,
 } from "./ingest.ts";
 
@@ -39,6 +41,7 @@ function baseEvent(overrides = {}) {
     tool: "codex",
     model: "gpt-5.6-sol",
     skill: "test-driven-development",
+    routing: { arm: "treatment", holdout_declared: true },
     cost: { amount: 0.042, currency: "USD" },
     outcome: {
       status: "passed",
@@ -47,6 +50,13 @@ function baseEvent(overrides = {}) {
         model: "judge-model-v2",
         version: "2026-08-24",
         criteria_hash: "a".repeat(64),
+        attestation: {
+          issuer: "independent-judge-service",
+          key_id: "judge-key-1",
+          algorithm: "ed25519",
+          signed_at: "2026-08-24T04:59:00Z",
+          signature: Buffer.alloc(64, 3).toString("base64"),
+        },
       },
     },
     receipt: {
@@ -55,18 +65,18 @@ function baseEvent(overrides = {}) {
       algorithm: "ed25519",
       signed_at: "2026-08-24T05:00:00Z",
       evidence_hash: "b".repeat(64),
-      signature: `${"A".repeat(86)}==`,
+      signature: Buffer.alloc(64, 1).toString("base64"),
     },
     ...overrides,
   };
 }
 
-async function keyFixture() {
+async function keyFixture(keyId = "lab-key-1") {
   const pair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
   const spki = await crypto.subtle.exportKey("spki", pair.publicKey);
   return {
     privateKey: pair.privateKey,
-    publicKeys: JSON.stringify({ "lab-key-1": Buffer.from(spki).toString("base64") }),
+    publicKeys: JSON.stringify({ [keyId]: Buffer.from(spki).toString("base64") }),
   };
 }
 
@@ -94,10 +104,17 @@ test("rejects a self-judged passed outcome", () => {
         model: "gpt-5.6-sol",
         version: "2026-08-24",
         criteria_hash: "a".repeat(64),
+        attestation: baseEvent().outcome.judge.attestation,
       },
     },
   });
   assert.match(validateLabEvent(event).join("\n"), /judge model must differ/i);
+});
+
+test("rejects a passed outcome without a separately signed judge attestation", () => {
+  const event = baseEvent();
+  delete event.outcome.judge.attestation;
+  assert.match(validateLabEvent(event).join("\n"), /attestation/i);
 });
 
 test("accepts the minimal private LAB event contract", () => {
@@ -134,6 +151,68 @@ test("accepts the English daily summary and rejects inconsistent counts", () => 
   assert.match(validateDailySummary(summary).errors.join("\n"), /only verified LAB receipts/i);
 });
 
+test("accepts the bounded deprecated English v1 daily contract", () => {
+  const summary = {
+    schema: "batuta.daily_summary.v1",
+    day: "2026-08-24",
+    installation: "0123456789abcdef",
+    batuta_version: "0.1.0",
+    mode: "local",
+    routes: 1,
+    routes_suggested: 1,
+    routes_holdout: 0,
+    suggested_arm: { ok: 0, n: 0 },
+    holdout_arm: { ok: 0, n: 0 },
+    declared_bias: "voluntary sample",
+    skills: [{
+      skill: "xlsx", version: "1", routes: 1, activations: 1,
+      user_activations: 0, turns_judged: 0, turns_ok: 0,
+      reprompts: 0, errors: 0, retries: 0, tokens_in: 0, tokens_out: 0,
+      cost_usd: 0, median_turns_to_completion: 0, ghost: false,
+    }],
+  };
+  assert.deepEqual(validateDailySummary(summary).errors, []);
+});
+
+test("bounds daily aggregate cardinality, money, tokens, and per-skill coherence", () => {
+  const base = {
+    schema: "batuta.daily_summary.v2",
+    date: "2026-08-24",
+    installation_id: "0123456789abcdef",
+    batuta_version: "0.2.0",
+    mode: "hook",
+    routes: 1,
+    routes_with_suggestions: 1,
+    holdout_routes: 0,
+    treatment_arm: { passed: 0, total: 0 },
+    holdout_arm: { passed: 0, total: 0 },
+    declared_bias: "voluntary sample",
+    measurement_disclaimer: "observability only",
+    skills: [{
+      skill: "xlsx", version: "1", routes: 1, activations: 1,
+      user_activations: 0, judged_turns: 0, successful_turns: 0,
+      reprompts: 0, errors: 0, retries: 0, tokens_in: 0, tokens_out: 0,
+      cost_usd: 0, median_turns_to_finish: 0, ghost: false,
+    }],
+  };
+  assert.deepEqual(validateDailySummary(base).errors, []);
+  for (const [field, value, expected] of [
+    ["cost_usd", 1_000_001, /cost_usd.*between/i],
+    ["tokens_in", 1_000_000_000_001, /tokens_in.*between/i],
+    ["activations", 2, /activations cannot exceed routes/i],
+  ]) {
+    const candidate = structuredClone(base);
+    candidate.skills[0][field] = value;
+    assert.match(validateDailySummary(candidate).errors.join("\n"), expected);
+  }
+  const tooMany = structuredClone(base);
+  tooMany.skills = Array.from({ length: 1001 }, (_, index) => ({
+    ...base.skills[0],
+    skill: `skill-${index}`,
+  }));
+  assert.match(validateDailySummary(tooMany).errors.join("\n"), /at most 1000/i);
+});
+
 test("verifies a detached runner receipt over evidence and verdict", async () => {
   const keys = await keyFixture();
   const event = baseEvent();
@@ -141,6 +220,29 @@ test("verifies a detached runner receipt over evidence and verdict", async () =>
   assert.equal(await verifyReceipt(event, keys.publicKeys), true);
   event.cost.amount = 99;
   assert.equal(await verifyReceipt(event, keys.publicKeys), false);
+});
+
+test("requires a cryptographically separate judge key for passed or failed", async () => {
+  const runner = await keyFixture("lab-key-1");
+  const judge = await keyFixture("judge-key-1");
+  const event = baseEvent();
+  event.outcome.judge.attestation.signature = await sign(
+    judge.privateKey,
+    canonicalJudgeMessage(event),
+  );
+  assert.equal(
+    await verifyJudgeAttestation(event, judge.publicKeys, runner.publicKeys),
+    true,
+  );
+
+  event.outcome.judge.attestation.signature = await sign(
+    runner.privateKey,
+    canonicalJudgeMessage(event),
+  );
+  assert.equal(
+    await verifyJudgeAttestation(event, runner.publicKeys.replaceAll("lab-key-1", "judge-key-1"), runner.publicKeys),
+    false,
+  );
 });
 
 test("authenticates the exact request body and rejects tampering or stale timestamps", async () => {

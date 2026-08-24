@@ -101,7 +101,7 @@ broken by ascending index — determinism is a requirement, not a convenience.
 positive costs more than a false negative: a skill suggested for no reason enters
 the context, spends tokens, and teaches the model to ignore the suggestion.
 
-## 5. Causal holdout
+## 5. Declared local holdout
 
 In `holdout_pct`% of turns (default **5**) the router deliberately stays silent.
 
@@ -112,6 +112,12 @@ falls_in_holdout = (first 4 hex chars of h, as u32) % 100 < holdout_pct
 
 Deliberately deterministic: the same question always lands in the same arm, so you
 can't just retry until the router speaks.
+
+This is a local routing assignment, not yet causal evidence. The current LAB
+contract reports an arm after execution; it has no preregistered, independently
+signed assignment receipt. Arm aggregates are therefore descriptive only. A
+future causal claim requires assignment committed before execution and linked to
+the blind judge's receipt.
 
 Non-negotiable conditions: **declared** to the user up front on first run,
 **configurable**, **can be turned off**. A hidden experiment destroys the project.
@@ -131,9 +137,10 @@ The route event logs:
 lives at `~/.batuta/salt` with 0600 permissions, and is **never sent** — without it,
 nobody can test a guessed prompt against the published hash.
 
-What gets uploaded (and only with explicit opt-in) is the **daily summary
-aggregated per skill**, schema `batuta.daily_summary.v2` — never the raw event. 200
-turns/day become ~20 lines.
+`batuta summary` produces a **daily summary aggregated per skill**, schema
+`batuta.daily_summary.v2` — never the raw event. This release only previews it
+locally: there is no public uploader or key-enrollment flow. The server endpoint
+is fail-closed and accepts only pre-provisioned aggregate signers/installations.
 
 ## 7. Network
 
@@ -165,13 +172,14 @@ route  →  activate  →  outcome
   one-key vote, an overnight judge
 
 Metrics: fire rate (`activate ÷ route`) · ghost skill (0 activations in N turns) ·
-lift against the holdout · **cost per completed task** — the metric nobody has,
+descriptive arm comparison · **cost per independently judged task** — the metric nobody has,
 because a skill can make the call more expensive while making the task cheaper by
 killing reprompts.
 
 ## 10. The battery
 
-`crates/batuta/tests/conformance.rs`, 15 tests. The corpus setup is concurrency-safe.
+`crates/batuta/tests/conformance.rs`, 15 tests. The suite shares process-wide
+environment state and must run with `--test-threads=1`.
 
 | # | what it locks down |
 |---|---|

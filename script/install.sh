@@ -3,8 +3,8 @@
 #
 #   curl -fsSL https://batuta.space/install.sh | sh
 #
-# Pin a version:      BATUTA_VERSION=v0.1.0 curl -fsSL https://batuta.space/install.sh | sh
-# Choose the folder:  BATUTA_DEST=/opt/bin curl -fsSL https://batuta.space/install.sh | sh
+# Pin a version:      curl -fsSL https://batuta.space/install.sh | BATUTA_VERSION=v0.1.0 sh
+# Choose the folder:  curl -fsSL https://batuta.space/install.sh | BATUTA_DEST=/opt/bin sh
 #
 # Pure POSIX sh, no bashisms. Checks the SHA256 against the release's SHA256SUMS:
 # if it doesn't match, it doesn't install. No half installation — it goes in whole, or not at all.
@@ -15,6 +15,7 @@ REPO="filipecrocks/batuta"
 BASE_API="https://api.github.com/repos/$REPO"
 BASE_DL="https://github.com/$REPO/releases/download"
 TMPDIR_BATUTA=""
+DEST_TMP_BATUTA=""
 
 die() {
     printf '\n  batuta: %s\n\n' "$1" >&2
@@ -26,6 +27,7 @@ warn() {
 }
 
 cleanup() {
+    [ -n "$DEST_TMP_BATUTA" ] && [ -f "$DEST_TMP_BATUTA" ] && rm -f "$DEST_TMP_BATUTA"
     [ -n "$TMPDIR_BATUTA" ] && [ -d "$TMPDIR_BATUTA" ] && rm -rf "$TMPDIR_BATUTA"
     return 0
 }
@@ -64,6 +66,7 @@ elif has openssl; then
 else
     die "need sha256sum, shasum or openssl to verify the download. Without verifying, I don't install."
 fi
+has gh || die "need GitHub CLI (gh) to verify build provenance. Without provenance verification, I don't install."
 
 checksum() {
     # checksum <file> -> prints only the hash in lowercase
@@ -151,6 +154,9 @@ if [ "$EXPECTED" != "$OBTAINED" ]; then
 fi
 
 printf '  sha256 verified: %s\n' "$OBTAINED"
+gh attestation verify "$TMPDIR_BATUTA/$PACKAGE" --repo "$REPO" >/dev/null 2>&1 ||
+    die "GitHub build-provenance attestation verification failed. Nothing was installed."
+printf '  build provenance verified\n'
 
 # ------------------------------------------------------------------- unpack
 
@@ -175,11 +181,16 @@ mkdir -p "$DEST" || die "could not create $DEST."
 [ -w "$DEST" ] || die "$DEST exists but I don't have write permission.
        Choose another one:  BATUTA_DEST=\$HOME/.local/bin sh install.sh"
 
-# mv within the same tree when possible; falls back to cp if cross-device.
-mv "$TMPDIR_BATUTA/batuta" "$DEST/batuta" 2>/dev/null ||
-    cp "$TMPDIR_BATUTA/batuta" "$DEST/batuta" ||
-    die "could not write $DEST/batuta."
-chmod 755 "$DEST/batuta"
+# Copy to a temporary file inside DEST, flush it, and rename within that same
+# directory. The final replacement is atomic even when TMPDIR is another mount.
+DEST_TMP_BATUTA="$(mktemp "$DEST/.batuta-install.XXXXXX")" ||
+    die "could not create a temporary file inside $DEST."
+cp "$TMPDIR_BATUTA/batuta" "$DEST_TMP_BATUTA" ||
+    die "could not stage the binary inside $DEST."
+chmod 755 "$DEST_TMP_BATUTA"
+sync
+mv "$DEST_TMP_BATUTA" "$DEST/batuta" || die "could not atomically install $DEST/batuta."
+DEST_TMP_BATUTA=""
 
 # --------------------------------------------------------------------- verify
 

@@ -3,8 +3,8 @@
 Batuta publishes performance budgets, not context-free numbers copied from one
 machine. The current contract is:
 
-- route scoring over the frozen 500+ skill corpus averages less than 50 ms in a
-  release build;
+- the in-process operational route (scoring, lifecycle state, locked event append
+  and sync) over the frozen 500+ skill corpus averages less than 50 ms in a release build;
 - every hook also has an independent 300 ms wall-clock deadline;
 - the route benchmark is in-process and does not include process startup, disk
   discovery, a network request, or model latency.

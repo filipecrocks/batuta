@@ -18,11 +18,13 @@ export function FormularioArena() {
     try {
       const r = await fetch("/api/arena", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": `arena:${crypto.randomUUID()}`,
+        },
         body: JSON.stringify({
           statement: dados.get("enunciado"),
           category: dados.get("categoria"),
-          contact: dados.get("contato") || null,
         }),
       });
       const corpo = await r.json().catch(() => ({}));
@@ -64,11 +66,6 @@ export function FormularioArena() {
         <option value="research">pesquisa</option>
         <option value="automation">automação</option>
       </select>
-
-      <label htmlFor="contato">
-        E-mail (opcional) — só para te avisar quando esta tarefa rodar
-      </label>
-      <input id="contato" name="contato" type="text" autoComplete="email" />
 
       <div className="botoes">
         <button className="botao botao-forte" type="submit" disabled={estado === "enviando"}>

@@ -78,7 +78,9 @@ fn write_into(v: &Value, s: &mut String) {
         Value::Null => s.push_str("null"),
         Value::Bool(b) => s.push_str(if *b { "true" } else { "false" }),
         Value::Num(n) => {
-            if n.fract() == 0.0 && n.abs() < 1e15 {
+            if !n.is_finite() {
+                s.push_str("null");
+            } else if n.fract() == 0.0 && n.abs() < 1e15 {
                 let _ = write!(s, "{}", *n as i64);
             } else {
                 let _ = write!(s, "{}", (n * 1e6).round() / 1e6);
@@ -228,25 +230,30 @@ fn parse_value(b: &[char], i: &mut usize, depth: usize) -> Result<Value, String>
                                 *i += 4;
                                 let cp = u32::from_str_radix(&hex, 16)
                                     .map_err(|_| "invalid \\u escape".to_string())?;
-                                if (0xD800..0xDC00).contains(&cp)
-                                    && *i + 6 <= b.len()
-                                    && b[*i] == '\\'
-                                    && b[*i + 1] == 'u'
-                                {
-                                    let hex2: String = b[*i + 2..*i + 6].iter().collect();
-                                    if let Ok(lo) = u32::from_str_radix(&hex2, 16) {
-                                        if (0xDC00..0xE000).contains(&lo) {
-                                            *i += 6;
-                                            let full =
-                                                0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
-                                            s.push(char::from_u32(full).unwrap_or('\u{fffd}'));
-                                            continue;
-                                        }
+                                if (0xD800..0xDC00).contains(&cp) {
+                                    if !(*i + 6 <= b.len() && b[*i] == '\\' && b[*i + 1] == 'u') {
+                                        return Err("high surrogate without a low surrogate".into());
                                     }
+                                    let hex2: String = b[*i + 2..*i + 6].iter().collect();
+                                    let lo = u32::from_str_radix(&hex2, 16)
+                                        .map_err(|_| "invalid low surrogate".to_string())?;
+                                    if !(0xDC00..0xE000).contains(&lo) {
+                                        return Err("high surrogate without a low surrogate".into());
+                                    }
+                                    *i += 6;
+                                    let full = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                                    s.push(char::from_u32(full).ok_or("invalid surrogate pair")?);
+                                    continue;
                                 }
-                                s.push(char::from_u32(cp).unwrap_or('\u{fffd}'));
+                                if (0xDC00..0xE000).contains(&cp) {
+                                    return Err("low surrogate without a high surrogate".into());
+                                }
+                                s.push(char::from_u32(cp).ok_or("invalid Unicode scalar")?);
                             }
-                            other => s.push(other),
+                            '"' => s.push('"'),
+                            '\\' => s.push('\\'),
+                            '/' => s.push('/'),
+                            _ => return Err("unknown string escape".into()),
                         }
                     }
                     c if (c as u32) < 0x20 => {
@@ -274,15 +281,46 @@ fn parse_value(b: &[char], i: &mut usize, depth: usize) -> Result<Value, String>
         }
         _ => {
             let start = *i;
-            while *i < b.len()
-                && (b[*i].is_ascii_digit()
-                    || b[*i] == '-'
-                    || b[*i] == '+'
-                    || b[*i] == '.'
-                    || b[*i] == 'e'
-                    || b[*i] == 'E')
-            {
+            if b[*i] == '-' {
                 *i += 1;
+            }
+            if *i >= b.len() {
+                return Err("truncated number".into());
+            }
+            if b[*i] == '0' {
+                *i += 1;
+                if *i < b.len() && b[*i].is_ascii_digit() {
+                    return Err("leading zero in number".into());
+                }
+            } else if matches!(b[*i], '1'..='9') {
+                while *i < b.len() && b[*i].is_ascii_digit() {
+                    *i += 1;
+                }
+            } else {
+                return Err(format!("invalid number at position {start}"));
+            }
+            if *i < b.len() && b[*i] == '.' {
+                *i += 1;
+                let fraction_start = *i;
+                while *i < b.len() && b[*i].is_ascii_digit() {
+                    *i += 1;
+                }
+                if *i == fraction_start {
+                    return Err("fraction requires at least one digit".into());
+                }
+            }
+            if *i < b.len() && matches!(b[*i], 'e' | 'E') {
+                *i += 1;
+                if *i < b.len() && matches!(b[*i], '+' | '-') {
+                    *i += 1;
+                }
+                let exponent_start = *i;
+                while *i < b.len() && b[*i].is_ascii_digit() {
+                    *i += 1;
+                }
+                if *i == exponent_start {
+                    return Err("exponent requires at least one digit".into());
+                }
             }
             let s: String = b[start..*i].iter().collect();
             let number = s

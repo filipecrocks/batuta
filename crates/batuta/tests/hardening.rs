@@ -1,6 +1,7 @@
-use batuta::{home, index, json, lifecycle, record, route, text};
+use batuta::{find, home, index, json, lifecycle, record, route, text};
 use std::fs;
 use std::path::Path;
+use std::process::{Command, Stdio};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -19,6 +20,12 @@ fn private_test_home(name: &str) -> std::path::PathBuf {
         index::now()
     ));
     let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+    }
     std::env::set_var("BATUTA_HOME", &root);
     std::env::remove_var("BATUTA_CASA");
     root
@@ -128,6 +135,25 @@ fn h03_generated_turn_ids_are_unique_even_for_repeated_prompts() {
     assert!(text::is_safe_correlation_id(
         unsafe_id.event.field("turn_id").text()
     ));
+}
+
+#[test]
+fn h03b_index_does_not_persist_home_or_project_prefixes() {
+    let _environment = environment_guard();
+    let root = private_test_home("index-path-privacy");
+    let skills = root.join("private-project-name").join("skills");
+    write_skill(
+        &skills,
+        "xlsx",
+        "Clean spreadsheet columns",
+        "spreadsheet table cleanup",
+    );
+
+    let raw = index::write(&index::build(std::slice::from_ref(&skills)));
+    assert!(!raw.contains(&root.to_string_lossy().to_string()), "{raw}");
+    assert!(!raw.contains("private-project-name"), "{raw}");
+    assert!(raw.contains("xlsx/SKILL.md"), "{raw}");
+    assert!(raw.contains("local-1"), "{raw}");
 }
 
 #[test]
@@ -334,4 +360,654 @@ fn h10_json_parser_rejects_excessive_depth_and_non_finite_numbers() {
     assert!(json::read(&deeply_nested).is_err());
     assert!(json::read("1e999").is_err());
     assert!(json::read("\"line\nfeed\"").is_err());
+    for invalid in [
+        "+1",
+        ".5",
+        "01",
+        "1.",
+        "1e",
+        "\"x\\q\"",
+        "\"\\uD800\"",
+        "\"\\uDC00\"",
+    ] {
+        assert!(
+            json::read(invalid).is_err(),
+            "accepted invalid JSON: {invalid}"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn h11_legacy_salt_is_atomically_migrated_without_changing_identity() {
+    let _environment = environment_guard();
+    let root = private_test_home("legacy-salt");
+    home::ensure().unwrap();
+    let legacy = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    fs::write(root.join("sal"), legacy).unwrap();
+
+    let before = batuta::sha256::hex(&batuta::sha256::sha256(
+        format!("instalacao|{legacy}").as_bytes(),
+    ))[..16]
+        .to_string();
+    assert_eq!(home::try_salt().unwrap(), legacy);
+    assert_eq!(home::installation_id(), before);
+    assert_eq!(fs::read_to_string(root.join("salt")).unwrap(), legacy);
+    assert_eq!(mode(&root.join("salt")), 0o600);
+    assert_eq!(mode(&root.join("sal")), 0o600);
+}
+
+#[test]
+fn h12_process_deadline_includes_blocked_stdin_and_lock_waits() {
+    let _environment = environment_guard();
+    let root = private_test_home("process-deadline");
+    home::ensure().unwrap();
+    let binary = env!("CARGO_BIN_EXE_batuta");
+
+    let mut blocked_stdin = Command::new(binary)
+        .args(["route", "--stdin-json", "--mode", "hook"])
+        .env("BATUTA_HOME", &root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let _open_stdin = blocked_stdin.stdin.take().unwrap();
+    std::thread::sleep(Duration::from_millis(450));
+    let status = blocked_stdin
+        .try_wait()
+        .unwrap()
+        .expect("route process exceeded its own 300 ms blocked-stdin deadline");
+    assert_eq!(status.code(), Some(124));
+
+    fs::create_dir(root.join("events.lock")).unwrap();
+    let started = std::time::Instant::now();
+    let status = Command::new(binary)
+        .args(["route", "spreadsheet cleanup", "--mode", "hook"])
+        .env("BATUTA_HOME", &root)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap();
+    assert_eq!(status.code(), Some(124));
+    assert!(
+        started.elapsed() < Duration::from_millis(700),
+        "route process exceeded its wall-clock lock-contention budget: {:?}",
+        started.elapsed()
+    );
+    assert!(
+        record::load().is_empty(),
+        "timed-out routes must not be reported as delivered"
+    );
+    assert!(
+        !home::read_config().informed,
+        "a failed route must not acknowledge an unseen disclosure"
+    );
+
+    fs::remove_dir(root.join("events.lock")).unwrap();
+    let retry = Command::new(binary)
+        .args(["route", "spreadsheet cleanup", "--mode", "hook"])
+        .env("BATUTA_HOME", &root)
+        .output()
+        .unwrap();
+    assert!(retry.status.success());
+    assert!(
+        String::from_utf8_lossy(&retry.stdout).contains("Disclosure:"),
+        "the first successful retry must repeat the disclosure"
+    );
+    assert!(home::read_config().informed);
+}
+
+#[test]
+#[cfg(unix)]
+fn h13_rejects_dangerous_state_directories_without_chmod() {
+    let _environment = environment_guard();
+    let cwd = std::env::current_dir().unwrap();
+    let before = mode(&cwd);
+    for dangerous in [
+        std::path::PathBuf::from(""),
+        std::path::PathBuf::from("/"),
+        std::env::temp_dir(),
+    ] {
+        std::env::set_var("BATUTA_HOME", &dangerous);
+        assert!(
+            home::ensure().is_err(),
+            "accepted dangerous BATUTA_HOME={dangerous:?}"
+        );
+    }
+    assert_eq!(mode(&cwd), before);
+
+    let binary = env!("CARGO_BIN_EXE_batuta");
+    for dangerous in ["", "/", "/tmp"] {
+        for arguments in [
+            vec!["log", "--event", "outcome", "--turn-id", "safe-turn"],
+            vec!["install-hooks"],
+        ] {
+            let status = Command::new(binary)
+                .args(arguments)
+                .env("BATUTA_HOME", dangerous)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap();
+            assert!(
+                !status.success(),
+                "writer accepted BATUTA_HOME={dangerous:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn h14_legacy_actor_is_mapped_and_invalid_metrics_fail_closed() {
+    let _environment = environment_guard();
+    let root = private_test_home("legacy-actor");
+    home::ensure().unwrap();
+    let binary = env!("CARGO_BIN_EXE_batuta");
+    let activation = Command::new(binary)
+        .args([
+            "log",
+            "--evento",
+            "ativacao",
+            "--skill",
+            "xlsx",
+            "--por",
+            "modelo",
+            "--turn-id",
+            "legacy-turn",
+        ])
+        .env("BATUTA_HOME", &root)
+        .output()
+        .unwrap();
+    assert!(
+        activation.status.success(),
+        "{}",
+        String::from_utf8_lossy(&activation.stderr)
+    );
+    let outcome = Command::new(binary)
+        .args([
+            "log",
+            "--event",
+            "outcome",
+            "--cost",
+            "NaN",
+            "--turn-id",
+            "safe-number",
+        ])
+        .env("BATUTA_HOME", &root)
+        .status()
+        .unwrap();
+    assert_eq!(outcome.code(), Some(2));
+    let events = record::load();
+    assert_eq!(events[0].field("actor").text(), "model");
+    assert_eq!(events.len(), 1);
+
+    for arguments in [
+        ["--cost", "-1"],
+        ["--cost", "typo"],
+        ["--errors", "1.5"],
+        ["--tokens-in", "1000000000001"],
+    ] {
+        let status = Command::new(binary)
+            .args(["log", "--event", "outcome"])
+            .args(arguments)
+            .env("BATUTA_HOME", &root)
+            .status()
+            .unwrap();
+        assert_eq!(status.code(), Some(2));
+    }
+    let invalid_holdout = Command::new(binary)
+        .args(["config", "holdout", "typo"])
+        .env("BATUTA_HOME", &root)
+        .status()
+        .unwrap();
+    assert_eq!(invalid_holdout.code(), Some(2));
+}
+
+#[test]
+fn h15_concurrent_lifecycle_hooks_claim_each_transition_once() {
+    let _environment = environment_guard();
+    private_test_home("lifecycle-claim");
+    let mut routed = route::route("clean spreadsheet", "hook", None, "0.0.0");
+    routed.event = json::object(vec![
+        ("v", json::number(2)),
+        ("t", json::number(index::now() as f64)),
+        ("type", json::text("route")),
+        ("turn_id", json::text("turn-concurrent")),
+        (
+            "suggestions",
+            json::Value::List(vec![json::object(vec![("skill", json::text("xlsx"))])]),
+        ),
+    ]);
+    let session = json::object(vec![("session_id", json::text("session-concurrent"))]);
+    lifecycle::begin_turn(&session, &routed).unwrap();
+    let activation = json::object(vec![
+        ("session_id", json::text("session-concurrent")),
+        ("tool_name", json::text("Skill")),
+        (
+            "tool_input",
+            json::object(vec![("skill", json::text("xlsx"))]),
+        ),
+    ]);
+    let activation_workers: Vec<_> = (0..8)
+        .map(|_| {
+            let activation = activation.clone();
+            std::thread::spawn(move || lifecycle::record_activation(&activation).unwrap())
+        })
+        .collect();
+    assert_eq!(
+        activation_workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .filter(|recorded| *recorded)
+            .count(),
+        1
+    );
+
+    let outcome_workers: Vec<_> = (0..8)
+        .map(|_| {
+            let session = session.clone();
+            std::thread::spawn(move || lifecycle::record_outcome(&session).unwrap())
+        })
+        .collect();
+    assert_eq!(
+        outcome_workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .filter(|recorded| *recorded)
+            .count(),
+        1
+    );
+    let events = record::load();
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.field("type").text() == "activation")
+            .count(),
+        1
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.field("type").text() == "outcome")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn h16_timed_out_hook_releases_session_lock_on_process_exit() {
+    let _environment = environment_guard();
+    let root = private_test_home("process-lock-recovery");
+    let mut routed = route::route("clean spreadsheet", "hook", None, "0.0.0");
+    routed.event = json::object(vec![
+        ("v", json::number(2)),
+        ("t", json::number(index::now() as f64)),
+        ("type", json::text("route")),
+        ("turn_id", json::text("turn-recovery")),
+        ("suggestions", json::Value::List(Vec::new())),
+    ]);
+    let session = json::object(vec![("session_id", json::text("session-recovery"))]);
+    lifecycle::begin_turn(&session, &routed).unwrap();
+
+    let events_lock = root.join("events.lock");
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+    let holder = std::thread::spawn(move || {
+        batuta::storage::with_exclusive_lock(events_lock, Duration::from_secs(1), || {
+            ready_tx.send(()).unwrap();
+            std::thread::sleep(Duration::from_millis(800));
+            Ok(())
+        })
+        .unwrap();
+    });
+    ready_rx.recv().unwrap();
+
+    let binary = env!("CARGO_BIN_EXE_batuta");
+    let mut timed_out = Command::new(binary)
+        .args(["hook", "outcome", "--stdin-json"])
+        .env("BATUTA_HOME", &root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    use std::io::Write;
+    timed_out
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"{\"session_id\":\"session-recovery\"}")
+        .unwrap();
+    assert_eq!(timed_out.wait().unwrap().code(), Some(124));
+    holder.join().unwrap();
+
+    let mut recovered = Command::new(binary)
+        .args(["hook", "outcome", "--stdin-json"])
+        .env("BATUTA_HOME", &root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    recovered
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"{\"session_id\":\"session-recovery\"}")
+        .unwrap();
+    assert!(recovered.wait().unwrap().success());
+    assert_eq!(
+        record::load()
+            .iter()
+            .filter(|event| event.field("type").text() == "outcome")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn h17_concurrent_processes_share_the_first_generated_salt() {
+    let _environment = environment_guard();
+    let root = private_test_home("salt-process-race");
+    let binary = env!("CARGO_BIN_EXE_batuta");
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(12));
+    let workers: Vec<_> = (0..12)
+        .map(|_| {
+            let barrier = barrier.clone();
+            let root = root.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                let output = Command::new(binary)
+                    .arg("config")
+                    .env("BATUTA_HOME", root)
+                    .output()
+                    .unwrap();
+                assert!(
+                    output.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                String::from_utf8(output.stdout)
+                    .unwrap()
+                    .lines()
+                    .find_map(|line| line.strip_prefix("installation = "))
+                    .unwrap()
+                    .to_string()
+            })
+        })
+        .collect();
+    let ids: std::collections::BTreeSet<_> = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect();
+    assert_eq!(
+        ids.len(),
+        1,
+        "first-run salt race produced multiple installation IDs"
+    );
+}
+
+#[test]
+fn h18_config_field_updates_do_not_revert_concurrent_consent() {
+    let _environment = environment_guard();
+    private_test_home("config-race");
+    home::write_config(&home::Config::default()).unwrap();
+    let upload = std::thread::spawn(|| {
+        for _ in 0..50 {
+            home::update_config(|config| config.upload = true).unwrap();
+        }
+    });
+    let disclosure = std::thread::spawn(|| {
+        for _ in 0..50 {
+            home::update_config(|config| config.informed = true).unwrap();
+        }
+    });
+    upload.join().unwrap();
+    disclosure.join().unwrap();
+    let config = home::read_config();
+    assert!(config.upload);
+    assert!(config.informed);
+}
+
+#[test]
+#[cfg(unix)]
+fn h19_upgrade_tightens_legacy_state_files_and_rejects_symlinks() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    let _environment = environment_guard();
+    let root = private_test_home("legacy-permissions");
+    fs::create_dir_all(&root).unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
+    let salt = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    for (name, body) in [
+        ("sal", salt),
+        ("config.txt", "upload=no\nholdout_pct=5\n"),
+        ("indice.txt", "BATUTA-INDEX 1\nG 0\nN 0\nA 1\n"),
+        ("eventos.jsonl", "{\"type\":\"legacy\"}\n"),
+    ] {
+        let path = root.join(name);
+        fs::write(&path, body).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o644)).unwrap();
+    }
+    assert_eq!(home::try_salt().unwrap(), salt);
+    let _ = home::read_config();
+    let _ = home::read_state_file("indice.txt").unwrap();
+    assert_eq!(record::load().len(), 1);
+    assert_eq!(mode(&root), 0o700);
+    for name in ["sal", "salt", "config.txt", "indice.txt", "eventos.jsonl"] {
+        assert_eq!(
+            mode(&root.join(name)),
+            0o600,
+            "legacy mode not tightened for {name}"
+        );
+    }
+
+    let target = std::env::temp_dir().join(format!("batuta-symlink-target-{}", std::process::id()));
+    fs::create_dir_all(&target).unwrap();
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+    let link = std::env::temp_dir().join(format!("batuta-symlink-home-{}", std::process::id()));
+    let _ = fs::remove_file(&link);
+    symlink(&target, &link).unwrap();
+    std::env::set_var("BATUTA_HOME", &link);
+    assert!(home::ensure().is_err());
+}
+
+#[test]
+#[cfg(unix)]
+fn h20_installed_hook_pins_the_audited_binary_instead_of_path_lookup() {
+    use std::os::unix::fs::PermissionsExt;
+    let _environment = environment_guard();
+    let root = private_test_home("hook-binary-pin");
+    let binary = std::fs::canonicalize(env!("CARGO_BIN_EXE_batuta")).unwrap();
+    let output = Command::new(&binary)
+        .arg("install-hooks")
+        .env("BATUTA_HOME", &root)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(json::read(
+        String::from_utf8_lossy(&output.stdout)
+            .split("Merge this into ~/.claude/settings.json:\n")
+            .nth(1)
+            .unwrap()
+            .trim()
+    )
+    .is_ok());
+
+    let hook = fs::read_to_string(root.join("user-prompt-submit.sh")).unwrap();
+    assert!(hook.contains(&binary.to_string_lossy().to_string()));
+    assert!(!hook.contains("command -v batuta"));
+    assert!(!hook.contains("__BATUTA_EXECUTABLE__"));
+    for name in ["post-tool-use.sh", "stop.sh"] {
+        let hook = fs::read_to_string(root.join(name)).unwrap();
+        assert!(hook.contains(&binary.to_string_lossy().to_string()));
+        assert!(!hook.contains("command -v batuta"));
+    }
+
+    let evil = root.join("evil-bin");
+    fs::create_dir(&evil).unwrap();
+    let marker = root.join("path-hijacked");
+    let fake = evil.join("batuta");
+    fs::write(
+        &fake,
+        format!("#!/bin/sh\nprintf stolen > '{}'\n", marker.display()),
+    )
+    .unwrap();
+    fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+    let mut child = Command::new("sh")
+        .arg(root.join("user-prompt-submit.sh"))
+        .env("BATUTA_HOME", &root)
+        .env("PATH", format!("{}:/usr/bin:/bin", evil.display()))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    use std::io::Write as _;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"{\"prompt\":\"private prompt\",\"session_id\":\"pinned\"}")
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+    assert!(!marker.exists());
+}
+
+#[test]
+fn h22_find_sanitizes_terminal_controls_and_bidi_from_external_text() {
+    let _environment = environment_guard();
+    let root = private_test_home("terminal-boundary");
+    home::atomic_write(
+        &root.join("registry.json"),
+        br#"{"skills":[{"name":"xlsx","version":"1","description":"spreadsheet\u001b]8;;https://evil.invalid\u0007link","body":"spreadsheet columns","source":"registry\u202Eevil"}]}"#,
+        0o600,
+    )
+    .unwrap();
+    let output = find::find("spreadsheet columns");
+    assert!(!output.contains('\u{1b}'));
+    assert!(!output.contains('\u{7}'));
+    assert!(!output.contains('\u{202e}'));
+}
+
+#[test]
+fn h23_aggregate_deduplicates_retried_transitions_and_ignores_orphans() {
+    let routed = json::object(vec![
+        ("type", json::text("route")),
+        ("turn_id", json::text("turn-dedup")),
+        ("t", json::number(1)),
+        (
+            "suggestions",
+            json::Value::List(vec![json::object(vec![("skill", json::text("xlsx"))])]),
+        ),
+    ]);
+    let activation = json::object(vec![
+        ("type", json::text("activation")),
+        ("turn_id", json::text("turn-dedup")),
+        ("skill", json::text("xlsx")),
+        ("t", json::number(2)),
+    ]);
+    let orphan = json::object(vec![
+        ("type", json::text("activation")),
+        ("turn_id", json::text("turn-missing")),
+        ("skill", json::text("xlsx")),
+        ("t", json::number(3)),
+    ]);
+    let aggregate = record::aggregate(
+        &[
+            routed.clone(),
+            routed,
+            activation.clone(),
+            activation,
+            orphan,
+        ],
+        None,
+    );
+    assert_eq!(aggregate.routes, 1);
+    assert_eq!(aggregate.skills["xlsx"].routes, 1);
+    assert_eq!(aggregate.skills["xlsx"].activations, 1);
+}
+
+#[test]
+#[cfg(unix)]
+fn h24_append_and_lock_files_refuse_symlink_targets() {
+    use std::os::unix::fs::symlink;
+    let _environment = environment_guard();
+    let root = private_test_home("nofollow-writes");
+    home::ensure().unwrap();
+    let target = root.join("target.txt");
+    fs::write(&target, b"sentinel without newline").unwrap();
+    symlink(&target, root.join("events.jsonl")).unwrap();
+    assert!(record::append(&json::object(vec![("type", json::text("test"))])).is_err());
+    assert_eq!(fs::read(&target).unwrap(), b"sentinel without newline");
+
+    let lock_target = root.join("lock-target.txt");
+    fs::write(&lock_target, b"lock sentinel").unwrap();
+    let lock_link = root.join("malicious.lock");
+    symlink(&lock_target, &lock_link).unwrap();
+    assert!(
+        batuta::storage::with_exclusive_lock(lock_link, Duration::from_millis(10), || Ok(()))
+            .is_err()
+    );
+    assert_eq!(fs::read(&lock_target).unwrap(), b"lock sentinel");
+}
+
+#[test]
+#[cfg(unix)]
+fn h25_state_creation_refuses_a_symlinked_ancestor() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    let _environment = environment_guard();
+    let container = std::env::temp_dir().join(format!(
+        "batuta-ancestor-link-{}-{}",
+        std::process::id(),
+        index::now()
+    ));
+    let target = container.join("target");
+    fs::create_dir_all(&target).unwrap();
+    fs::set_permissions(&container, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+    let link = container.join("link");
+    symlink(&target, &link).unwrap();
+    std::env::set_var("BATUTA_HOME", link.join("state"));
+    assert!(home::ensure().is_err());
+    assert!(!target.join("state").exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn h26_privacy_shell_quotes_the_local_deletion_path() {
+    let _environment = environment_guard();
+    let root = std::env::temp_dir().join("batuta state;$(touch pwned)'quoted");
+    let output = Command::new(env!("CARGO_BIN_EXE_batuta"))
+        .arg("privacy")
+        .env("BATUTA_HOME", &root)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let raw = root.to_string_lossy();
+    let quoted = format!("'{}'", raw.replace('\'', "'\"'\"'"));
+    assert!(stdout.contains(&format!("rm -rf {quoted}")), "{stdout}");
+    assert!(!stdout.contains(&format!("rm -rf {raw}\n")), "{stdout}");
+}
+
+#[test]
+fn h21_append_recovers_a_crash_partial_tail_before_next_frame() {
+    let _environment = environment_guard();
+    let root = private_test_home("partial-tail");
+    home::ensure().unwrap();
+    fs::write(
+        root.join("events.jsonl"),
+        b"{\"type\":\"complete\"}\n{\"type\":\"partial\"",
+    )
+    .unwrap();
+    record::append(&json::object(vec![("type", json::text("next"))])).unwrap();
+    let events = record::load();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].field("type").text(), "complete");
+    assert_eq!(events[1].field("type").text(), "next");
 }

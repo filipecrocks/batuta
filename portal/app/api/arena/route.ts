@@ -12,6 +12,7 @@
  * The vote that comes afterward orders the test QUEUE. Never the result (§1.6).
  */
 import { sql, hasDb } from "../../../lib/db";
+import { createHash } from "node:crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,26 +22,23 @@ const BYTE_LIMIT = 64 * 1024;
 
 const CATEGORIES = ["code", "writing", "data", "documents", "research", "automation"];
 
-const CORS: Record<string, string> = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "POST, OPTIONS",
-  "access-control-allow-headers": "content-type",
-  "access-control-max-age": "86400",
-};
-
-function json(body: unknown, status = 200) {
+function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", ...CORS },
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...headers,
+    },
   });
 }
 
 export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: CORS });
+  return json({ ok: false, error: "cross-origin arena submission is not allowed" }, 405, { allow: "POST" });
 }
 
 export async function GET() {
-  return json({ ok: false, error: "this endpoint only accepts POST", fields: ["statement", "category", "contact (optional)"] }, 405);
+  return json({ ok: false, error: "this endpoint only accepts POST", fields: ["statement", "category"] }, 405);
 }
 
 // ================================================================== screening 0
@@ -81,6 +79,15 @@ export async function POST(req: Request) {
     return json({ ok: false, error: "arena unavailable: the portal has no DATABASE_URL configured", action: "try again later" }, 503);
   }
 
+  const origin = req.headers.get("origin");
+  if (origin && origin !== new URL(req.url).origin) {
+    return json({ ok: false, error: "cross-origin arena submission is not allowed" }, 403);
+  }
+  const idempotencyKey = req.headers.get("idempotency-key") ?? "";
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{7,159}$/.test(idempotencyKey)) {
+    return json({ ok: false, error: "a valid Idempotency-Key header is required" }, 400);
+  }
+
   const declared = Number(req.headers.get("content-length") ?? "0");
   if (declared > BYTE_LIMIT) {
     return json({ ok: false, error: "body too large" }, 413);
@@ -103,12 +110,16 @@ export async function POST(req: Request) {
     return json({ ok: false, error: `invalid JSON: ${(err as Error).message}` }, 400);
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return json({ ok: false, error: "the body has to be a JSON object {statement, category, contact?}" }, 400);
+    return json({ ok: false, error: "the body has to be a JSON object {statement, category}" }, 400);
+  }
+
+  const unknownFields = Object.keys(body).filter((key) => !["statement", "category"].includes(key));
+  if (unknownFields.length) {
+    return json({ ok: false, error: `unknown field(s): ${unknownFields.join(", ")}` }, 400);
   }
 
   const statement = typeof body.statement === "string" ? body.statement.trim() : "";
   const category = typeof body.category === "string" ? body.category.trim().toLowerCase() : "";
-  const contact = typeof body.contact === "string" ? body.contact.trim() : "";
 
   const problems: string[] = [];
   if (statement.length < 20) {
@@ -122,10 +133,9 @@ export async function POST(req: Request) {
   if (!CATEGORIES.includes(category)) {
     problems.push(`category has to be one of: ${CATEGORIES.join(", ")}`);
   }
-  if (contact.length > 200) problems.push("contact is over 200 characters");
   if (problems.length) return json({ ok: false, error: "submission rejected", problems }, 400);
 
-  const reason = rejectionReason(statement) ?? (contact ? rejectionReason(contact) : null);
+  const reason = rejectionReason(statement);
   if (reason) {
     return json(
       {
@@ -140,12 +150,22 @@ export async function POST(req: Request) {
   }
 
   try {
-    const r = await sql<{ id: number }>`
-      insert into batuta.tasks (original_statement, canonical_statement, category, status, source, contact)
-      values (${statement}, null, ${category}, 'screening', 'public', ${contact || null})
-      returning id
+    const requestHash = createHash("sha256").update(raw, "utf8").digest("hex");
+    const r = await sql<{ submission_status: "accepted" | "replay" | "conflict" | "rate_limited"; task_id: number | null }>`
+      select submission_status, task_id
+      from batuta.submit_arena_task(
+        ${idempotencyKey}, ${requestHash}, ${statement}, ${category}, 20
+      )
     `;
-    const id = r[0]?.id ?? null;
+    const result = r[0];
+    if (!result) throw new Error("submit_arena_task returned no row");
+    if (result.submission_status === "rate_limited") {
+      return json({ ok: false, error: "arena submission rate limit exceeded" }, 429, { "retry-after": "60" });
+    }
+    if (result.submission_status === "conflict") {
+      return json({ ok: false, error: "idempotency key was reused with a different submission" }, 409);
+    }
+    const id = result.task_id;
 
     return json(
       {
@@ -161,11 +181,10 @@ export async function POST(req: Request) {
         ],
         the_bar_is_ours:
           "you suggested the problem; we're the ones who write the acceptance criteria. That's the gate that keeps whoever writes a skill from submitting the exact task their skill wins.",
-        contact: contact
-          ? "we keep your contact only to notify you when this task runs. It doesn't become a list, doesn't become a newsletter."
-          : "no contact: follow along on the arena page",
+        follow_up: "follow along on the arena page; Batuta does not collect contact details here",
       },
-      201,
+      result.submission_status === "replay" ? 200 : 201,
+      result.submission_status === "replay" ? { "x-batuta-idempotent-replay": "true" } : {},
     );
   } catch (err) {
     console.error("[batuta] arena failed:", err);

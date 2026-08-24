@@ -16,8 +16,63 @@ env:
   CARGO_MANIFEST_PATH: crates/batuta/Cargo.toml
 
 jobs:
+  verify:
+    name: verify release source
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install 1.93.1 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.93.1
+          rustc --version && cargo --version
+
+      - name: Verify Rust
+        shell: bash
+        run: |
+          crate_version="$(cargo metadata --locked --no-deps --manifest-path "$CARGO_MANIFEST_PATH" | jq -r '.packages[] | select(.name == "batuta") | .version')"
+          test "$GITHUB_REF_NAME" = "v$crate_version"
+          cargo fmt --all --manifest-path "$CARGO_MANIFEST_PATH" -- --check
+          cargo clippy --all-targets --locked --manifest-path "$CARGO_MANIFEST_PATH" -- -D warnings
+          cargo test --locked --all-features --manifest-path "$CARGO_MANIFEST_PATH" -- --test-threads=1
+
+      - name: Check declared Rust 1.74 MSRV
+        shell: bash
+        run: |
+          rustup toolchain install 1.74.0 --profile minimal --no-self-update
+          cargo +1.74.0 check --locked --manifest-path "$CARGO_MANIFEST_PATH"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.16.0
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+
+      - name: Verify package version matches the release tag
+        shell: bash
+        run: test "$(node -p "require('./npm/package.json').version")" = "${GITHUB_REF_NAME#v}"
+
+      - name: Verify portal and adapters
+        working-directory: portal
+        shell: bash
+        run: |
+          test "$(npm --version)" = "11.13.0"
+          npm ci --ignore-scripts
+          npm audit --audit-level=high
+          ../script/test-installer.sh
+          npm test
+          npm run typecheck
+          npm run build
+
+      - name: Verify migrations and database invariants
+        shell: bash
+        run: ./script/test-sql.sh
+
   build:
     name: build ${{ matrix.target }}
+    needs: verify
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -35,8 +90,6 @@ jobs:
             runner: macos-15-intel
           - target: aarch64-apple-darwin
             runner: macos-26
-          - target: x86_64-pc-windows-msvc
-            runner: windows-2025
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -80,20 +133,6 @@ jobs:
             shasum -a 256 "$package_name" > "$package_name.sha256"
           fi
           cat "$package_name.sha256"
-
-      - name: Package zip and checksum
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          New-Item -ItemType Directory -Force -Path release-files | Out-Null
-          Copy-Item "crates/batuta/target/${{ matrix.target }}/release/batuta.exe" release-files/batuta.exe
-          $packageName = "batuta-${{ matrix.target }}.zip"
-          Compress-Archive -Path release-files/batuta.exe -DestinationPath $packageName -Force
-          $h = (Get-FileHash -Algorithm SHA256 $packageName).Hash.ToLower()
-          # Coreutils format (two spaces), checked by the publication job.
-          [IO.File]::WriteAllText((Join-Path $PWD "$packageName.sha256"), "$h  $packageName`n")
-          Get-Content "$packageName.sha256"
 
       - name: Attest release archive provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -141,10 +180,14 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "batuta $TAG" \
-              --generate-notes
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            printf 'refusing to replace existing release %s\n' "$TAG" >&2
+            exit 1
           fi
-          gh release upload "$TAG" release-files/* --repo "$GITHUB_REPOSITORY" --clobber
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "batuta $TAG" \
+            --generate-notes \
+            --draft
+          gh release upload "$TAG" release-files/* --repo "$GITHUB_REPOSITORY"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false

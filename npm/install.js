@@ -30,7 +30,6 @@ const TARGETS = {
   "linux-arm64": "aarch64-unknown-linux-musl",
   "darwin-x64": "x86_64-apple-darwin",
   "darwin-arm64": "aarch64-apple-darwin",
-  "win32-x64": "x86_64-pc-windows-msvc",
 };
 
 function die(msg) {
@@ -208,26 +207,9 @@ async function main() {
     die("the package has no '" + binName + "' inside. Release built wrong.");
   }
 
-  const vendorDir = path.join(__dirname, "vendor");
-  const destination = path.join(vendorDir, binName);
-  const tmp = path.join(vendorDir, "." + binName + "." + process.pid);
-  try {
-    fs.mkdirSync(vendorDir, { recursive: true, mode: 0o700 });
-    if (process.platform !== "win32") fs.chmodSync(vendorDir, 0o700);
-    const descriptor = fs.openSync(tmp, "wx", 0o700);
-    try {
-      fs.writeFileSync(descriptor, bin);
-      fs.fsyncSync(descriptor);
-    } finally {
-      fs.closeSync(descriptor);
-    }
-    fs.renameSync(tmp, destination);
-    fs.chmodSync(destination, 0o700);
-  } catch (e) {
-    try { fs.unlinkSync(tmp); } catch {}
-    die("could not write " + destination + ": " + e.message);
-  }
+  writeBinary(bin, binName);
 
+  const destination = path.join(__dirname, "vendor", binName);
   process.stdout.write(
     "  installed: " + destination + "\n\n" +
     "  Next 3 steps, in this order:\n" +
@@ -238,7 +220,29 @@ async function main() {
   );
 }
 
-module.exports = { main: main, download: download, readTarGz: readTarGz, readZip: readZip };
+function writeBinary(bin, binName, vendorDir = path.join(__dirname, "vendor")) {
+  const destination = path.join(vendorDir, binName);
+  const tmp = path.join(vendorDir, "." + binName + "." + process.pid);
+  try {
+    fs.mkdirSync(vendorDir, { recursive: true, mode: 0o755 });
+    if (process.platform !== "win32") fs.chmodSync(vendorDir, 0o755);
+    const descriptor = fs.openSync(tmp, "wx", 0o755);
+    try {
+      fs.writeFileSync(descriptor, bin);
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    fs.renameSync(tmp, destination);
+    fs.chmodSync(destination, 0o755);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch {}
+    throw new Error("could not write " + destination + ": " + e.message);
+  }
+  return destination;
+}
+
+module.exports = { main: main, download: download, readTarGz: readTarGz, readZip: readZip, writeBinary: writeBinary };
 
 if (require.main === module) {
   main().catch(function (e) {

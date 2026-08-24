@@ -8,8 +8,10 @@
 import {
   createHash,
   createPrivateKey,
+  createPublicKey,
   randomBytes,
   sign,
+  verify,
 } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
@@ -35,6 +37,26 @@ function assertPrivateKeyFile(path) {
 function loadPrivateKey(path) {
   assertPrivateKeyFile(path);
   return createPrivateKey(readFileSync(path));
+}
+
+function publicKeys(serialized) {
+  let parsed;
+  try {
+    parsed = JSON.parse(serialized ?? "");
+  } catch {
+    throw new Error("judgePublicKeys must be a JSON key_id to base64-SPKI map");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("judgePublicKeys must be a JSON key_id to base64-SPKI map");
+  }
+  return parsed;
+}
+
+function signatureBytes(value) {
+  if (typeof value !== "string") return null;
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.length !== 64 || decoded.toString("base64").replace(/=+$/, "") !== value.replace(/=+$/, "")) return null;
+  return decoded;
 }
 
 function findForbiddenKey(value, path = "$", depth = 0) {
@@ -80,7 +102,7 @@ function validateInput(input) {
   if (forbidden) throw new Error(`forbidden private key at ${forbidden}`);
   const allowed = new Set([
     "event_id", "signed_at", "run_id", "project", "order", "tool", "model",
-    "skill", "cost", "outcome", "evidence_hash",
+    "skill", "routing", "cost", "outcome", "evidence_hash",
   ]);
   const extras = Object.keys(input).filter((key) => !allowed.has(key));
   if (extras.length) throw new Error(`unknown input fields: ${extras.join(", ")}`);
@@ -95,7 +117,19 @@ function validateInput(input) {
   }
   for (const field of ["run_id", "project", "tool", "model"]) assertId(input[field], field);
   if (input.skill !== null && input.skill !== undefined) assertId(input.skill, "skill");
-  if (!Number.isSafeInteger(input.order) || input.order < 0) throw new Error("order must be a non-negative safe integer");
+  if (!input.routing || typeof input.routing !== "object" || Array.isArray(input.routing)) {
+    throw new Error("routing must be {arm, holdout_declared}");
+  }
+  const routingExtras = Object.keys(input.routing).filter((key) => !["arm", "holdout_declared"].includes(key));
+  if (routingExtras.length) throw new Error(`unknown routing fields: ${routingExtras.join(", ")}`);
+  if (!["treatment", "holdout", "unassigned"].includes(input.routing.arm)) {
+    throw new Error("routing.arm must be treatment, holdout, or unassigned");
+  }
+  if (typeof input.routing.holdout_declared !== "boolean") throw new Error("routing.holdout_declared must be boolean");
+  if (input.routing.arm === "holdout" && !input.routing.holdout_declared) throw new Error("a holdout arm must be declared");
+  if (!Number.isSafeInteger(input.order) || input.order < 0 || input.order > 2_147_483_647) {
+    throw new Error("order must be a non-negative 32-bit integer");
+  }
   if (!input.cost || typeof input.cost !== "object" || input.cost.currency !== "USD") throw new Error("cost must use USD");
   if (typeof input.cost.amount !== "number" || !Number.isFinite(input.cost.amount) || input.cost.amount < 0 || input.cost.amount > 1_000_000) {
     throw new Error("cost.amount must be a finite number between 0 and 1000000");
@@ -112,12 +146,27 @@ function validateInput(input) {
     if (input.outcome.authority !== "independent_judge" || !judge || typeof judge !== "object") {
       throw new Error("passed/failed outcomes require an independent judge");
     }
-    const judgeExtras = Object.keys(judge).filter((key) => !["model", "version", "criteria_hash"].includes(key));
+    const judgeExtras = Object.keys(judge).filter((key) => !["model", "version", "criteria_hash", "attestation"].includes(key));
     if (judgeExtras.length) throw new Error(`unknown judge fields: ${judgeExtras.join(", ")}`);
     assertId(judge.model, "outcome.judge.model");
     assertId(judge.version, "outcome.judge.version");
     if (judge.model === input.model) throw new Error("judge model must differ from subject model");
     if (!HEX_64.test(judge.criteria_hash ?? "")) throw new Error("judge criteria_hash must be 64 lowercase hexadecimal characters");
+    const attestation = judge.attestation;
+    if (!attestation || typeof attestation !== "object" || Array.isArray(attestation)) {
+      throw new Error("passed/failed outcomes require a separate judge attestation");
+    }
+    const attestationExtras = Object.keys(attestation).filter((key) => !["issuer", "key_id", "algorithm", "signed_at", "signature"].includes(key));
+    if (attestationExtras.length) throw new Error(`unknown judge attestation fields: ${attestationExtras.join(", ")}`);
+    assertId(attestation.issuer, "outcome.judge.attestation.issuer");
+    assertId(attestation.key_id, "outcome.judge.attestation.key_id");
+    if (attestation.algorithm !== "ed25519") throw new Error("judge attestation algorithm must be ed25519");
+    if (
+      typeof attestation.signed_at !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(attestation.signed_at) ||
+      !Number.isFinite(Date.parse(attestation.signed_at))
+    ) throw new Error("judge attestation signed_at must be an ISO-8601 timestamp");
+    if (!signatureBytes(attestation.signature)) throw new Error("judge attestation signature must be base64 Ed25519");
   } else {
     throw new Error("outcome.status must be passed, failed, or unknown");
   }
@@ -125,6 +174,7 @@ function validateInput(input) {
 }
 
 export function canonicalReceiptMessage(event) {
+  const judgeAttestation = event.outcome.judge?.attestation;
   return [
     "batuta-receipt-v1",
     event.event_id,
@@ -134,6 +184,8 @@ export function canonicalReceiptMessage(event) {
     event.tool,
     event.model,
     event.skill ?? "-",
+    event.routing.arm,
+    String(event.routing.holdout_declared),
     String(event.cost.amount),
     event.cost.currency,
     event.outcome.status,
@@ -141,12 +193,66 @@ export function canonicalReceiptMessage(event) {
     event.outcome.judge?.model ?? "-",
     event.outcome.judge?.version ?? "-",
     event.outcome.judge?.criteria_hash ?? "-",
+    judgeAttestation?.issuer ?? "-",
+    judgeAttestation?.key_id ?? "-",
+    judgeAttestation?.algorithm ?? "-",
+    judgeAttestation?.signed_at ?? "-",
+    judgeAttestation?.signature ?? "-",
     event.receipt.issuer,
     event.receipt.key_id,
     event.receipt.algorithm,
     event.receipt.signed_at,
     event.receipt.evidence_hash,
   ].join("\n");
+}
+
+export function canonicalJudgeMessage(event) {
+  const judge = event.outcome.judge;
+  const attestation = judge?.attestation;
+  return [
+    "batuta-judge-v1",
+    event.event_id,
+    event.run_id,
+    event.project,
+    String(event.order),
+    event.tool,
+    event.model,
+    event.skill ?? "-",
+    event.routing.arm,
+    String(event.routing.holdout_declared),
+    String(event.cost.amount),
+    event.cost.currency,
+    event.outcome.status,
+    event.outcome.authority,
+    judge?.model ?? "-",
+    judge?.version ?? "-",
+    judge?.criteria_hash ?? "-",
+    attestation?.issuer ?? "-",
+    attestation?.key_id ?? "-",
+    attestation?.algorithm ?? "-",
+    attestation?.signed_at ?? "-",
+    event.receipt.evidence_hash,
+  ].join("\n");
+}
+
+function verifyJudge(event, options, runnerPrivateKey) {
+  if (event.outcome.status === "unknown") return;
+  const attestation = event.outcome.judge.attestation;
+  if (attestation.key_id === options.keyId) throw new Error("judge and runner key IDs must differ");
+  const encoded = publicKeys(options.judgePublicKeys)[attestation.key_id];
+  if (typeof encoded !== "string") throw new Error("judge attestation key is not configured");
+  const judgeDer = Buffer.from(encoded, "base64");
+  const runnerDer = createPublicKey(runnerPrivateKey).export({ type: "spki", format: "der" });
+  if (judgeDer.equals(runnerDer)) throw new Error("judge and runner must use different cryptographic keys");
+  let judgeKey;
+  try {
+    judgeKey = createPublicKey({ key: judgeDer, type: "spki", format: "der" });
+  } catch {
+    throw new Error("configured judge key is not a valid SPKI public key");
+  }
+  if (!verify(null, Buffer.from(canonicalJudgeMessage(event), "utf8"), judgeKey, signatureBytes(attestation.signature))) {
+    throw new Error("judge attestation signature verification failed");
+  }
 }
 
 export async function prepareEvent(input, options) {
@@ -162,6 +268,7 @@ export async function prepareEvent(input, options) {
     tool: input.tool,
     model: input.model,
     skill: input.skill ?? null,
+    routing: { arm: input.routing.arm, holdout_declared: input.routing.holdout_declared },
     cost: { amount: input.cost.amount, currency: "USD" },
     outcome: input.outcome,
     receipt: {
@@ -174,6 +281,7 @@ export async function prepareEvent(input, options) {
     },
   };
   const privateKey = loadPrivateKey(options.privateKeyPath);
+  verifyJudge(event, options, privateKey);
   event.receipt.signature = sign(
     null,
     Buffer.from(canonicalReceiptMessage(event), "utf8"),
@@ -248,6 +356,7 @@ async function main() {
       issuer: argument("--issuer") ?? "lab-runner",
       keyId,
       privateKeyPath,
+      judgePublicKeys: process.env.BATUTA_JUDGE_PUBLIC_KEYS,
     });
     process.stdout.write(`${JSON.stringify(event)}\n`);
   } else if (command === "send") {

@@ -137,7 +137,7 @@ pub fn build(folders: &[PathBuf]) -> Index {
     };
     let mut seen: BTreeMap<String, ()> = BTreeMap::new();
 
-    for folder in folders {
+    for (folder_index, folder) in folders.iter().enumerate() {
         let mut files = Vec::new();
         find_skill_md(folder, 0, &mut files);
         for file in files {
@@ -190,8 +190,14 @@ pub fn build(folders: &[PathBuf]) -> Index {
                 name,
                 version,
                 description: clean(&description),
-                path: file.display().to_string(),
-                source: folder.display().to_string(),
+                // The persisted index must not disclose a user/home/project prefix.
+                // Routing only needs a human-readable locator, not an absolute path.
+                path: file
+                    .strip_prefix(folder)
+                    .unwrap_or(&file)
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+                source: format!("local-{}", folder_index + 1),
                 size,
             });
         }

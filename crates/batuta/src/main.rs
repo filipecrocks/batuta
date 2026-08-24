@@ -2,11 +2,13 @@
 
 use batuta::json::{self, number, object, text as json_text, Value};
 use batuta::{conflicts, data, find, home, index, lifecycle, record, route, text, VERSION};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::time::Duration;
 
 const MAX_STDIN_BYTES: u64 = 256 * 1024;
-const ROUTE_TIMEOUT: Duration = Duration::from_millis(300);
+// Leave 50 ms for stdout flush and process teardown beneath the public 300 ms
+// hook ceiling. Work that cannot finish in 250 ms is discarded.
+const ROUTE_TIMEOUT: Duration = Duration::from_millis(250);
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -64,15 +66,15 @@ https://batuta.space · zero profit · prompts never leave your machine
   batuta log --event activation --skill NAME [--actor model|user] [--turn-id ID]
   batuta log --event outcome          record an untrusted manual observation
   batuta report [--date YYYY-MM-DD]   show local observational metrics
-  batuta summary [--date YYYY-MM-DD]  preview the private aggregate upload
+  batuta summary [--date YYYY-MM-DD]  preview the private aggregate locally
   batuta find \"<what you need>\"      installed -> available -> gap
   batuta conflicts                    find competing skills
-  batuta config [key value]           upload, holdout_pct, portal
-  batuta privacy                      explain local and uploaded data
+  batuta config [key value]           holdout_pct, portal (upload is unavailable)
+  batuta privacy                      explain local and controlled-import data
   batuta install-hooks                write route/activation/outcome hooks
 
-Upload is explicit opt-in and includes only a daily per-skill aggregate. Batuta
-is an observability layer, never sole proof of delivery. Portuguese aliases remain
+`batuta summary` is a local preview; this release has no public uploader or key
+enrollment. Batuta is an observability layer, never sole proof of delivery. Portuguese aliases remain
 available with deprecation warnings during the v0.x compatibility window.
 "
     )
@@ -127,12 +129,30 @@ fn has(args: &[String], name: &str) -> bool {
     args.iter().any(|argument| argument == name)
 }
 
-fn numeric_option(args: &[String], names: &[&str]) -> f64 {
-    names
-        .iter()
-        .find_map(|name| option(args, name))
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0.0)
+fn numeric_option(
+    args: &[String],
+    names: &[&str],
+    maximum: f64,
+    integer: bool,
+) -> Result<f64, String> {
+    let Some(raw) = names.iter().find_map(|name| option(args, name)) else {
+        return Ok(0.0);
+    };
+    let value: f64 = raw
+        .parse()
+        .map_err(|_| format!("{} must be a number", names[0]))?;
+    if !value.is_finite() || value < 0.0 || value > maximum || (integer && value.fract() != 0.0) {
+        return Err(format!(
+            "{} must be {} between 0 and {maximum}",
+            names[0],
+            if integer {
+                "an integer"
+            } else {
+                "a finite number"
+            }
+        ));
+    }
+    Ok(value)
 }
 
 fn positional(args: &[String]) -> Option<String> {
@@ -195,6 +215,15 @@ fn read_stdin() -> String {
     }
 }
 
+fn remaining(deadline: std::time::Instant) -> Option<Duration> {
+    deadline.checked_duration_since(std::time::Instant::now())
+}
+
+fn read_stdin_before(deadline: std::time::Instant) -> Result<String, route::Timeout> {
+    let timeout = remaining(deadline).ok_or(route::Timeout)?;
+    route::run_with_timeout(timeout, read_stdin)
+}
+
 fn cmd_index(args: &[String]) -> i32 {
     let mut folders = Vec::new();
     let mut position = 0;
@@ -237,8 +266,14 @@ fn cmd_index(args: &[String]) -> i32 {
 }
 
 fn cmd_route(args: &[String]) -> i32 {
+    // The 300 ms budget begins before stdin and JSON parsing. This makes the
+    // binary itself enforce the deadline even on hosts without GNU `timeout`.
+    let deadline = std::time::Instant::now() + ROUTE_TIMEOUT;
     let (prompt, hook_payload) = if has(args, "--stdin-json") {
-        match json::read(&read_stdin()) {
+        let Ok(input) = read_stdin_before(deadline) else {
+            return 124;
+        };
+        match json::read(&input) {
             Ok(payload) => {
                 let canonical = payload.field("prompt").text();
                 let prompt = if canonical.is_empty() {
@@ -251,7 +286,10 @@ fn cmd_route(args: &[String]) -> i32 {
             Err(_) => (String::new(), None),
         }
     } else if has(args, "--stdin") {
-        (read_stdin(), None)
+        let Ok(input) = read_stdin_before(deadline) else {
+            return 124;
+        };
+        (input, None)
     } else {
         (positional(args).unwrap_or_default(), None)
     };
@@ -267,21 +305,43 @@ fn cmd_route(args: &[String]) -> i32 {
         .or_else(|| option(args, "--turno"))
         .filter(|value| text::is_safe_correlation_id(value));
     let version = VERSION.to_string();
-    let result = route::run_with_timeout(ROUTE_TIMEOUT, move || {
-        let output = route::route(&prompt, &mode, turn_id, &version);
-        let _ = route::log_event(&output);
-        if let Some(payload) = hook_payload {
-            let _ = lifecycle::begin_turn(&payload, &output);
-        }
-        output
-    });
-    let Ok(output) = result else {
+    let Some(timeout) = remaining(deadline) else {
         return 124;
     };
-    if has(args, "--json") {
-        println!("{}", json::write(&output.event));
+    let result = route::run_with_timeout(timeout, move || {
+        let output = route::route(&prompt, &mode, turn_id, &version);
+        if let Some(payload) = hook_payload {
+            if lifecycle::begin_turn(&payload, &output).is_err() {
+                return None;
+            }
+        }
+        if route::log_event(&output).is_err() {
+            return None;
+        }
+        Some(output)
+    });
+    let Ok(Some(output)) = result else {
+        return 124;
+    };
+    let disclosure_pending = output.disclosure_pending;
+    let mut stdout = std::io::stdout().lock();
+    let delivered = if has(args, "--json") {
+        writeln!(stdout, "{}", json::write(&output.event))
     } else if let Some(message) = output.text {
-        println!("{message}");
+        writeln!(stdout, "{message}")
+    } else {
+        Ok(())
+    };
+    if delivered.and_then(|()| stdout.flush()).is_err() {
+        return 1;
+    }
+    drop(stdout);
+    if disclosure_pending {
+        // A failed or timed-out route must never suppress the only disclosure.
+        // If this bounded acknowledgement fails, the next route repeats it.
+        if let Some(timeout) = remaining(deadline) {
+            let _ = home::update_config_with_timeout(timeout, |config| config.informed = true);
+        }
     }
     0
 }
@@ -290,12 +350,19 @@ fn cmd_hook(args: &[String]) -> i32 {
     if !has(args, "--stdin-json") {
         return 2;
     }
-    let payload = match json::read(&read_stdin()) {
+    let deadline = std::time::Instant::now() + ROUTE_TIMEOUT;
+    let Ok(input) = read_stdin_before(deadline) else {
+        return 124;
+    };
+    let payload = match json::read(&input) {
         Ok(value) => value,
         Err(_) => return 0,
     };
     let action = args.first().cloned();
-    match route::run_with_timeout(ROUTE_TIMEOUT, move || match action.as_deref() {
+    let Some(timeout) = remaining(deadline) else {
+        return 124;
+    };
+    match route::run_with_timeout(timeout, move || match action.as_deref() {
         Some("activation" | "activate" | "ativacao") => lifecycle::record_activation(&payload),
         Some("outcome" | "desfecho") => lifecycle::record_outcome(&payload),
         _ => Err(std::io::Error::new(
@@ -339,7 +406,7 @@ fn cmd_log(args: &[String]) -> i32 {
                 .or_else(|| option(args, "--por"))
                 .unwrap_or_else(|| "model".to_string());
             let actor = match actor.as_str() {
-                "model" => "model",
+                "model" | "modelo" => "model",
                 "user" | "usuario" => "user",
                 _ => {
                     eprintln!("batuta log: --actor must be 'model' or 'user'");
@@ -368,6 +435,28 @@ fn cmd_log(args: &[String]) -> i32 {
             } else {
                 "unknown"
             };
+            let parsed = (
+                numeric_option(args, &["--reprompt"], 1_000_000_000.0, true),
+                numeric_option(args, &["--errors", "--erros"], 1_000_000_000.0, true),
+                numeric_option(args, &["--retries"], 1_000_000_000.0, true),
+                numeric_option(args, &["--turns", "--turnos"], 1_000_000.0, true),
+                numeric_option(args, &["--tokens-in"], 1_000_000_000_000.0, false),
+                numeric_option(args, &["--tokens-out"], 1_000_000_000_000.0, false),
+                numeric_option(args, &["--cost", "--custo"], 1_000_000.0, false),
+            );
+            let (reprompt, errors, retries, turns, tokens_in, tokens_out, cost_usd) = match parsed {
+                (Ok(a), Ok(b), Ok(c), Ok(d), Ok(e), Ok(f), Ok(g)) => (a, b, c, d, e, f, g),
+                values => {
+                    let message = [
+                        values.0, values.1, values.2, values.3, values.4, values.5, values.6,
+                    ]
+                    .into_iter()
+                    .find_map(Result::err)
+                    .unwrap_or_else(|| "invalid numeric observation".to_string());
+                    eprintln!("batuta log: {message}");
+                    return 2;
+                }
+            };
             object(vec![
                 ("schema", json_text("batuta.event.v2")),
                 ("v", number(2)),
@@ -377,25 +466,13 @@ fn cmd_log(args: &[String]) -> i32 {
                 ("status", json_text("unknown")),
                 ("reported_status", json_text(reported)),
                 ("ok", Value::Bool(false)),
-                ("reprompt", number(numeric_option(args, &["--reprompt"]))),
-                (
-                    "errors",
-                    number(numeric_option(args, &["--errors", "--erros"])),
-                ),
-                ("retries", number(numeric_option(args, &["--retries"]))),
-                (
-                    "turns",
-                    number(numeric_option(args, &["--turns", "--turnos"])),
-                ),
-                ("tokens_in", number(numeric_option(args, &["--tokens-in"]))),
-                (
-                    "tokens_out",
-                    number(numeric_option(args, &["--tokens-out"])),
-                ),
-                (
-                    "cost_usd",
-                    number(numeric_option(args, &["--cost", "--custo"])),
-                ),
+                ("reprompt", number(reprompt)),
+                ("errors", number(errors)),
+                ("retries", number(retries)),
+                ("turns", number(turns)),
+                ("tokens_in", number(tokens_in)),
+                ("tokens_out", number(tokens_out)),
+                ("cost_usd", number(cost_usd)),
                 ("authority", json_text("manual_observation")),
                 ("trusted", Value::Bool(false)),
                 ("receipt_verified", Value::Bool(false)),
@@ -443,9 +520,7 @@ fn cmd_summary(args: &[String]) -> i32 {
         "{}",
         json::write(&record::daily_summary(&aggregate, &date, VERSION, "local"))
     );
-    if !home::read_config().upload {
-        eprintln!("\n(upload is OFF. This is a preview containing aggregates only; no prompt, prompt hash, path, session ID, or turn ID.)");
-    }
+    eprintln!("\n(local preview only: this release has no public uploader or signer enrollment. The summary contains no prompt, prompt hash, path, session ID, or turn ID.)");
     0
 }
 
@@ -462,34 +537,49 @@ fn cmd_conflicts() -> i32 {
 }
 
 fn cmd_config(args: &[String]) -> i32 {
-    let mut config = home::read_config();
+    enum Update {
+        DisableUpload,
+        Holdout(u32),
+        Portal(String),
+    }
+
     if args.first().is_some_and(|key| key == "envio") {
         eprintln!("batuta: warning: config key 'envio' is deprecated; use 'upload'");
     }
-    match (
+    let update = match (
         args.first().map(String::as_str),
         args.get(1).map(String::as_str),
     ) {
         (Some("upload" | "envio"), Some(value)) => {
-            config.upload = matches!(value, "yes" | "sim" | "true" | "1");
-            config.informed = true;
+            let enabled = matches!(value, "yes" | "sim" | "true" | "1");
+            if enabled {
+                eprintln!("batuta config: public daily upload is unavailable; `batuta summary` remains a local preview");
+                return 2;
+            }
+            Update::DisableUpload
         }
         (Some("holdout" | "holdout_pct"), Some(value)) => {
-            config.holdout_pct = value.parse().unwrap_or(5).min(50);
+            let Ok(holdout) = value.parse::<u32>() else {
+                eprintln!("batuta config: holdout_pct must be an integer from 0 to 50");
+                return 2;
+            };
+            Update::Holdout(holdout.min(50))
         }
-        (Some("portal"), Some(value)) => config.portal = value.to_string(),
+        (Some("portal"), Some(value)) => Update::Portal(value.to_string()),
         _ => {
-            println!(
-                "upload       = {}",
-                if config.upload { "yes" } else { "no" }
-            );
+            let config = home::read_config();
+            println!("upload       = unavailable (local preview only)");
             println!("holdout_pct  = {}%", config.holdout_pct);
             println!("portal       = {}", config.portal);
             println!("installation = {}", home::installation_id());
             return 0;
         }
-    }
-    if let Err(error) = home::write_config(&config) {
+    };
+    if let Err(error) = home::update_config(|config| match update {
+        Update::DisableUpload => config.upload = false,
+        Update::Holdout(holdout) => config.holdout_pct = holdout,
+        Update::Portal(portal) => config.portal = portal,
+    }) {
         eprintln!("batuta config: {error}");
         return 1;
     }
@@ -500,13 +590,21 @@ fn cmd_config(args: &[String]) -> i32 {
 fn cmd_privacy() -> i32 {
     let directory = home::app_dir();
     println!(
-        "Batuta stores owner-only local state under {}:\n\n  salt          secure local salt, never uploaded\n  index.txt     local skill routing metadata\n  events.jsonl  route/activation/unknown-outcome observations\n  config.txt    preferences\n\nBatuta never persists prompt text, responses, project paths, session IDs, credentials,\nor secrets. Upload is opt-in and only sends an aggregate. LAB uses a separate signed,\nallowlisted event contract. Batuta measures behavior; it never proves delivery alone.\n\nDelete local state (irreversible): rm -rf {}",
-        directory.display(), directory.display()
+        "Batuta stores owner-only local state under {}:\n\n  salt          secure local salt, never uploaded\n  index.txt     skill names, descriptions, terms, and relative local locators\n  events.jsonl  route/activation/unknown-outcome transitions\n  config.txt    preferences\n\nBatuta never persists prompt text, responses, absolute project paths, session IDs,\ncredentials, or secrets. Local index and event records are never uploaded. This release\nonly previews daily summaries locally; the remote endpoint is pre-provisioned and has\nno public uploader. LAB uses a separate signed, allowlisted event contract. Batuta\nmeasures behavior; it never proves delivery alone.\n\nDelete local state (irreversible): rm -rf {}",
+        directory.display(), shell_quote(&directory.to_string_lossy())
     );
     0
 }
 
 fn cmd_hooks(args: &[String]) -> i32 {
+    let executable = match std::env::current_exe().and_then(|path| path.canonicalize()) {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("batuta: cannot resolve the audited executable path: {error}");
+            return 1;
+        }
+    };
+    let shell_executable = shell_quote(&executable.to_string_lossy());
     let hooks = [
         (
             "user-prompt-submit.sh",
@@ -520,23 +618,28 @@ fn cmd_hooks(args: &[String]) -> i32 {
     ];
     for (name, contents) in hooks {
         let path = home::app_dir().join(name);
-        if let Err(error) = home::atomic_write(&path, contents.as_bytes(), 0o700) {
+        let pinned = contents.replace("__BATUTA_EXECUTABLE__", &shell_executable);
+        if let Err(error) = home::atomic_write(&path, pinned.as_bytes(), 0o700) {
             eprintln!("batuta: could not write {}: {error}", path.display());
             return 1;
         }
     }
     let directory = home::app_dir();
+    let hook_command = |name: &str| {
+        let path = directory.join(name);
+        json::write(&json_text(shell_quote(&path.to_string_lossy())))
+    };
     let snippet = format!(
         r#"{{
   "hooks": {{
-    "UserPromptSubmit": [{{ "hooks": [{{ "type": "command", "command": "{}", "timeout": 1 }}] }}],
-    "PostToolUse": [{{ "matcher": "Skill", "hooks": [{{ "type": "command", "command": "{}", "timeout": 1 }}] }}],
-    "Stop": [{{ "hooks": [{{ "type": "command", "command": "{}", "timeout": 1 }}] }}]
+    "UserPromptSubmit": [{{ "hooks": [{{ "type": "command", "command": {}, "timeout": 1 }}] }}],
+    "PostToolUse": [{{ "matcher": "Skill", "hooks": [{{ "type": "command", "command": {}, "timeout": 1 }}] }}],
+    "Stop": [{{ "hooks": [{{ "type": "command", "command": {}, "timeout": 1 }}] }}]
   }}
 }}"#,
-        directory.join("user-prompt-submit.sh").display(),
-        directory.join("post-tool-use.sh").display(),
-        directory.join("stop.sh").display(),
+        hook_command("user-prompt-submit.sh"),
+        hook_command("post-tool-use.sh"),
+        hook_command("stop.sh"),
     );
     println!("Hooks written under {}\n", directory.display());
     if has(args, "--apply") || has(args, "--aplicar") {
@@ -548,4 +651,8 @@ fn cmd_hooks(args: &[String]) -> i32 {
     }
     println!("{snippet}\n");
     0
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }

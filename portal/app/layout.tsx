@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     template: "%s · Batuta",
   },
   description:
-    "Mede se uma Agent Skill funciona de verdade, a que custo e em qual modelo — e publica tudo, imutável, sem lucro.",
+    "Mede Agent Skills por observações locais e publica releases curadas numa cadeia verificável, sem lucro.",
   openGraph: {
     type: "website",
     locale: "pt_BR",
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     siteName: "Batuta",
     title: "Batuta — a camada aberta de medição de Agent Skills",
     description:
-      "Não é o 27º roteador do mercado. É o juiz — e funciona com qualquer roteador.",
+      "Não é o 27º roteador do mercado. É uma camada de observabilidade que funciona com qualquer roteador.",
   },
   icons: {
     icon: [

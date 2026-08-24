@@ -13,6 +13,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 pub struct Output {
     pub text: Option<String>,
     pub event: Value,
+    pub disclosure_pending: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,6 +68,7 @@ pub fn route(prompt: &str, mode: &str, given_turn_id: Option<String>, version: &
                 ("type", json_text("route_error")),
                 ("reason", json_text("secure_salt_unavailable")),
             ]),
+            disclosure_pending: false,
         };
     };
     let terms = text::terms(prompt);
@@ -84,10 +86,9 @@ pub fn route(prompt: &str, mode: &str, given_turn_id: Option<String>, version: &
     let mut suggestions: Vec<Value> = Vec::new();
     let mut candidate_ids: Vec<String> = Vec::new();
     if !holdout && !terms.is_empty() {
-        let current = home::app_dir().join("index.txt");
-        let legacy = home::app_dir().join("indice.txt");
-        let file = if current.is_file() { current } else { legacy };
-        if let Ok(raw) = std::fs::read_to_string(file) {
+        if let Ok(raw) =
+            home::read_state_file("index.txt").or_else(|_| home::read_state_file("indice.txt"))
+        {
             let indexed = index::read_partial(&raw, &terms);
             for matched in bm25::score(&indexed, &terms) {
                 let Some(skill) = indexed.skills.get(matched.skill as usize) else {
@@ -109,7 +110,14 @@ pub fn route(prompt: &str, mode: &str, given_turn_id: Option<String>, version: &
 
     let elapsed_ms = started.elapsed().as_micros() as f64 / 1000.0;
     let timestamp = index::now() as f64;
-    let event = object(vec![
+    let disclosure = (!config.informed).then(|| {
+        format!(
+            "Batuta routes locally and records no prompt text. Aggregate upload is off. \
+             A declared {}% deterministic holdout is active; `batuta config holdout 0` disables it.",
+            config.holdout_pct
+        )
+    });
+    let mut event_fields = vec![
         ("schema", json_text("batuta.event.v2")),
         ("v", number(2)),
         ("t", number(timestamp)),
@@ -127,20 +135,12 @@ pub fn route(prompt: &str, mode: &str, given_turn_id: Option<String>, version: &
         ("ms", number((elapsed_ms * 100.0).round() / 100.0)),
         ("duration_ms", number((elapsed_ms * 100.0).round() / 100.0)),
         ("suggestions", Value::List(suggestions)),
-    ]);
-
-    let disclosure = if !config.informed {
-        let mut updated = config.clone();
-        updated.informed = true;
-        let _ = home::write_config(&updated);
-        Some(format!(
-            "Batuta routes locally and records no prompt text. Aggregate upload is off. \
-             A declared {}% deterministic holdout is active; `batuta config holdout 0` disables it.",
-            config.holdout_pct
-        ))
-    } else {
-        None
-    };
+    ];
+    if let Some(message) = &disclosure {
+        // JSON callers must see the same disclosure before it is acknowledged.
+        event_fields.push(("disclosure", json_text(message)));
+    }
+    let event = object(event_fields);
     let output_text = if candidate_ids.is_empty() && disclosure.is_none() {
         None
     } else {
@@ -155,6 +155,7 @@ pub fn route(prompt: &str, mode: &str, given_turn_id: Option<String>, version: &
             holdout,
             candidates,
             disclosure
+                .as_ref()
                 .map(|value| format!("\nDisclosure: {value}"))
                 .unwrap_or_default(),
         ))
@@ -163,6 +164,7 @@ pub fn route(prompt: &str, mode: &str, given_turn_id: Option<String>, version: &
     Output {
         text: output_text,
         event,
+        disclosure_pending: disclosure.is_some(),
     }
 }
 

@@ -61,8 +61,8 @@ export default function Doar() {
         <h2>O que você pode dar que vale mais que dinheiro</h2>
         <ul>
           <li>
-            <strong>instalar e ligar o envio</strong> — amostra é o insumo escasso deste
-            projeto, não dinheiro
+            <strong>instalar e inspecionar o relatório local</strong> — não envie dados
+            até existir enrollment público e política de retenção/exclusão
           </li>
           <li>
             <strong>mandar uma tarefa real</strong> para a{" "}

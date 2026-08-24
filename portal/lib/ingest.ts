@@ -80,11 +80,23 @@ export type LabEvent = {
   tool: string;
   model: string;
   skill: string | null;
+  routing: { arm: "treatment" | "holdout" | "unassigned"; holdout_declared: boolean };
   cost: { amount: number; currency: "USD" };
   outcome: {
     status: "passed" | "failed" | "unknown";
     authority: "independent_judge" | "runtime_observation";
-    judge?: { model: string; version: string; criteria_hash: string };
+    judge?: {
+      model: string;
+      version: string;
+      criteria_hash: string;
+      attestation: {
+        issuer: string;
+        key_id: string;
+        algorithm: "ed25519";
+        signed_at: string;
+        signature: string;
+      };
+    };
   };
   receipt: {
     issuer: string;
@@ -150,13 +162,13 @@ export function validateLabEvent(value: unknown): string[] {
   if (!record(value)) return ["body must be a JSON object"];
   exactKeys(
     value,
-    ["schema", "event_id", "run_id", "project", "order", "tool", "model", "skill", "cost", "outcome", "receipt"],
+    ["schema", "event_id", "run_id", "project", "order", "tool", "model", "skill", "routing", "cost", "outcome", "receipt"],
     "$",
     errors,
   );
   requiredKeys(
     value,
-    ["schema", "event_id", "run_id", "project", "order", "tool", "model", "skill", "cost", "outcome", "receipt"],
+    ["schema", "event_id", "run_id", "project", "order", "tool", "model", "skill", "routing", "cost", "outcome", "receipt"],
     "$",
     errors,
   );
@@ -169,12 +181,27 @@ export function validateLabEvent(value: unknown): string[] {
       errors.push(`${field} contains characters outside the identifier allowlist`);
     }
   }
-  if (!Number.isSafeInteger(value.order) || (value.order as number) < 0) {
-    errors.push("order must be a non-negative safe integer");
+  if (!Number.isSafeInteger(value.order) || (value.order as number) < 0 || (value.order as number) > 2_147_483_647) {
+    errors.push("order must be a non-negative 32-bit integer");
   }
   if (value.skill !== null && value.skill !== undefined) {
     if (safeText(value.skill, "skill", errors) && !SAFE_ID.test(value.skill as string)) {
       errors.push("skill contains characters outside the identifier allowlist");
+    }
+  }
+  if (!record(value.routing)) {
+    errors.push("routing must be {arm, holdout_declared}");
+  } else {
+    exactKeys(value.routing, ["arm", "holdout_declared"], "routing", errors);
+    requiredKeys(value.routing, ["arm", "holdout_declared"], "routing", errors);
+    if (!matches(value.routing.arm, ["treatment", "holdout", "unassigned"])) {
+      errors.push("routing.arm must be treatment, holdout, or unassigned");
+    }
+    if (typeof value.routing.holdout_declared !== "boolean") {
+      errors.push("routing.holdout_declared must be boolean");
+    }
+    if (value.routing.arm === "holdout" && value.routing.holdout_declared !== true) {
+      errors.push("a holdout arm must be declared");
     }
   }
 
@@ -203,14 +230,41 @@ export function validateLabEvent(value: unknown): string[] {
       if (!record(value.outcome.judge)) {
         errors.push("passed/failed outcomes require a judge object");
       } else {
-        exactKeys(value.outcome.judge, ["model", "version", "criteria_hash"], "outcome.judge", errors);
+        exactKeys(value.outcome.judge, ["model", "version", "criteria_hash", "attestation"], "outcome.judge", errors);
+        requiredKeys(value.outcome.judge, ["model", "version", "criteria_hash", "attestation"], "outcome.judge", errors);
         if (safeText(value.outcome.judge.model, "outcome.judge.model", errors) && !SAFE_ID.test(value.outcome.judge.model as string)) {
           errors.push("outcome.judge.model contains characters outside the identifier allowlist");
         }
-        safeText(value.outcome.judge.version, "outcome.judge.version", errors);
+        if (safeText(value.outcome.judge.version, "outcome.judge.version", errors) && !SAFE_ID.test(value.outcome.judge.version as string)) {
+          errors.push("outcome.judge.version contains characters outside the identifier allowlist");
+        }
         if (value.outcome.judge.model === value.model) errors.push("judge model must differ from subject model");
         if (typeof value.outcome.judge.criteria_hash !== "string" || !HEX_64.test(value.outcome.judge.criteria_hash)) {
           errors.push("outcome.judge.criteria_hash must be 64 lowercase hexadecimal characters");
+        }
+        if (!record(value.outcome.judge.attestation)) {
+          errors.push("outcome.judge.attestation must be a separately signed object");
+        } else {
+          const attestation = value.outcome.judge.attestation;
+          exactKeys(attestation, ["issuer", "key_id", "algorithm", "signed_at", "signature"], "outcome.judge.attestation", errors);
+          requiredKeys(attestation, ["issuer", "key_id", "algorithm", "signed_at", "signature"], "outcome.judge.attestation", errors);
+          if (safeText(attestation.issuer, "outcome.judge.attestation.issuer", errors) && !SAFE_ID.test(attestation.issuer as string)) {
+            errors.push("outcome.judge.attestation.issuer contains characters outside the identifier allowlist");
+          }
+          if (safeText(attestation.key_id, "outcome.judge.attestation.key_id", errors) && !SAFE_ID.test(attestation.key_id as string)) {
+            errors.push("outcome.judge.attestation.key_id contains characters outside the identifier allowlist");
+          }
+          if (attestation.algorithm !== "ed25519") errors.push('outcome.judge.attestation.algorithm must be "ed25519"');
+          if (
+            typeof attestation.signed_at !== "string" ||
+            !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(attestation.signed_at) ||
+            !Number.isFinite(Date.parse(attestation.signed_at))
+          ) {
+            errors.push("outcome.judge.attestation.signed_at must be an ISO-8601 timestamp");
+          }
+          if (typeof attestation.signature !== "string" || decodeBase64(attestation.signature)?.length !== 64) {
+            errors.push("outcome.judge.attestation.signature must be a base64 Ed25519 signature");
+          }
         }
       }
     } else {
@@ -254,15 +308,29 @@ export function validateLabEvent(value: unknown): string[] {
       errors.push("receipt.signature must be a base64 Ed25519 signature");
     }
   }
+  if (
+    record(value.outcome) &&
+    record(value.outcome.judge) &&
+    record(value.outcome.judge.attestation) &&
+    record(value.receipt) &&
+    value.outcome.judge.attestation.key_id === value.receipt.key_id
+  ) {
+    errors.push("judge and runner must use different signing keys");
+  }
   return errors;
 }
 
-function nonNegativeInteger(value: unknown): boolean {
-  return Number.isSafeInteger(value) && (value as number) >= 0;
+const MAX_COUNT = 1_000_000_000;
+const MAX_TOKENS = 1_000_000_000_000;
+const MAX_COST_USD = 1_000_000;
+const MAX_TURNS = 1_000_000;
+
+function nonNegativeInteger(value: unknown, maximum = MAX_COUNT): boolean {
+  return Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= maximum;
 }
 
-function nonNegativeNumber(value: unknown): boolean {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+function nonNegativeNumber(value: unknown, maximum: number): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= maximum;
 }
 
 export function validateDailySummary(value: unknown): {
@@ -331,7 +399,7 @@ export function validateDailySummary(value: unknown): {
     ["routes_with_suggestions", routesWithSuggestions],
     ["holdout_routes", holdoutRoutes],
   ] as const) {
-    if (!nonNegativeInteger(count)) errors.push(`${name} must be a non-negative safe integer`);
+    if (!nonNegativeInteger(count)) errors.push(`${name} must be an integer between 0 and ${MAX_COUNT}`);
   }
   if (nonNegativeInteger(routes) && nonNegativeInteger(routesWithSuggestions) && (routesWithSuggestions as number) > (routes as number)) {
     errors.push("routes_with_suggestions cannot exceed routes");
@@ -347,17 +415,18 @@ export function validateDailySummary(value: unknown): {
     const passed = arm[isV2 ? "passed" : "ok"];
     const total = arm[isV2 ? "total" : "n"];
     exactKeys(arm, isV2 ? ["passed", "total"] : ["ok", "n"], name, errors);
-    if (!nonNegativeInteger(passed) || !nonNegativeInteger(total)) errors.push(`${name} counts must be non-negative safe integers`);
+    if (!nonNegativeInteger(passed) || !nonNegativeInteger(total)) errors.push(`${name} counts must be integers between 0 and ${MAX_COUNT}`);
     else if ((passed as number) > (total as number)) errors.push(`${name}.passed cannot exceed total`);
     else if ((passed as number) !== 0 || (total as number) !== 0) {
       errors.push(`${name} must be zero in client aggregates; only verified LAB receipts can establish judged outcomes`);
     }
   }
 
-  if (!Array.isArray(value.skills) || value.skills.length > 5000) {
-    errors.push("skills must be an array with at most 5000 entries");
+  if (!Array.isArray(value.skills) || value.skills.length > 1000) {
+    errors.push("skills must be an array with at most 1000 entries");
   } else {
     const seen = new Set<string>();
+    let summedSkillRoutes = 0;
     const skillFields = isV2
       ? [
           "skill", "version", "routes", "activations", "user_activations", "judged_turns",
@@ -391,26 +460,39 @@ export function validateDailySummary(value: unknown): {
           ? ["routes", "activations", "user_activations", "turns_judged", "turns_ok", "reprompts", "errors", "retries"]
           : ["rotas", "ativacoes", "ativacoes_usuario", "turnos_julgados", "turnos_ok", "reprompts", "erros", "retries"];
       for (const field of integerFields) {
-        if (!nonNegativeInteger(skill[field])) errors.push(`skills[${index}].${field} must be a non-negative safe integer`);
+        if (!nonNegativeInteger(skill[field])) errors.push(`skills[${index}].${field} must be an integer between 0 and ${MAX_COUNT}`);
+      }
+      const skillRoutes = skill[isPortugueseV1 ? "rotas" : "routes"];
+      const activations = skill[isPortugueseV1 ? "ativacoes" : "activations"];
+      const userActivations = skill[isPortugueseV1 ? "ativacoes_usuario" : "user_activations"];
+      if (nonNegativeInteger(skillRoutes)) summedSkillRoutes += skillRoutes as number;
+      if (nonNegativeInteger(skillRoutes) && nonNegativeInteger(activations) && (activations as number) > (skillRoutes as number)) {
+        errors.push(`skills[${index}].activations cannot exceed routes`);
+      }
+      if (nonNegativeInteger(activations) && nonNegativeInteger(userActivations) && (userActivations as number) > (activations as number)) {
+        errors.push(`skills[${index}].user_activations cannot exceed activations`);
       }
       const judgedField = isV2 ? "judged_turns" : isEnglishV1 ? "turns_judged" : "turnos_julgados";
       const successfulField = isV2 ? "successful_turns" : isPortugueseV1 ? "turnos_ok" : "turns_ok";
       if (skill[judgedField] !== 0 || skill[successfulField] !== 0) {
         errors.push(`skills[${index}] client aggregate cannot attest judged or successful outcomes`);
       }
-      const numericFields = isV2
-        ? ["tokens_in", "tokens_out", "cost_usd", "median_turns_to_finish"]
+      const numericFields: Array<[string, number]> = isV2
+        ? [["tokens_in", MAX_TOKENS], ["tokens_out", MAX_TOKENS], ["cost_usd", MAX_COST_USD], ["median_turns_to_finish", MAX_TURNS]]
         : isEnglishV1
-          ? ["tokens_in", "tokens_out", "cost_usd", "median_turns_to_completion"]
-          : ["tokens_in", "tokens_out", "custo_usd", "turnos_ate_fim_mediana"];
-      for (const field of numericFields) {
-        if (!nonNegativeNumber(skill[field])) errors.push(`skills[${index}].${field} must be a non-negative finite number`);
+          ? [["tokens_in", MAX_TOKENS], ["tokens_out", MAX_TOKENS], ["cost_usd", MAX_COST_USD], ["median_turns_to_completion", MAX_TURNS]]
+          : [["tokens_in", MAX_TOKENS], ["tokens_out", MAX_TOKENS], ["custo_usd", MAX_COST_USD], ["turnos_ate_fim_mediana", MAX_TURNS]];
+      for (const [field, maximum] of numericFields) {
+        if (!nonNegativeNumber(skill[field], maximum)) errors.push(`skills[${index}].${field} must be finite and between 0 and ${maximum}`);
       }
       const ghost = skill[isPortugueseV1 ? "fantasma" : "ghost"];
       if (typeof ghost !== "boolean") errors.push(`skills[${index}].ghost must be boolean`);
       const version = skill[isPortugueseV1 ? "versao" : "version"];
       if (typeof version !== "string" || version.length > 100) errors.push(`skills[${index}].version must be text of at most 100 characters`);
     });
+    if (nonNegativeInteger(routes) && summedSkillRoutes > (routes as number) * 3) {
+      errors.push("sum of per-skill routes cannot exceed three suggestions per route");
+    }
   }
 
   if (errors.length) return { errors };
@@ -458,11 +540,13 @@ function parsePublicKeys(serialized: string | undefined): Record<string, string>
   }
 }
 
+function publicKeyBytes(keyId: string, serialized: string | undefined): Uint8Array<ArrayBuffer> | null {
+  const encoded = parsePublicKeys(serialized)?.[keyId];
+  return encoded ? decodeBase64(encoded) : null;
+}
+
 async function importPublicKey(keyId: string, serialized: string | undefined): Promise<CryptoKey | null> {
-  const keys = parsePublicKeys(serialized);
-  const encoded = keys?.[keyId];
-  if (!encoded) return null;
-  const bytes = decodeBase64(encoded);
+  const bytes = publicKeyBytes(keyId, serialized);
   if (!bytes) return null;
   try {
     return await crypto.subtle.importKey("spki", bytes, "Ed25519", false, ["verify"]);
@@ -472,6 +556,7 @@ async function importPublicKey(keyId: string, serialized: string | undefined): P
 }
 
 export function canonicalReceiptMessage(event: LabEvent): string {
+  const judgeAttestation = event.outcome.judge?.attestation;
   return [
     "batuta-receipt-v1",
     event.event_id,
@@ -481,6 +566,8 @@ export function canonicalReceiptMessage(event: LabEvent): string {
     event.tool,
     event.model,
     event.skill ?? "-",
+    event.routing.arm,
+    String(event.routing.holdout_declared),
     String(event.cost.amount),
     event.cost.currency,
     event.outcome.status,
@@ -488,12 +575,69 @@ export function canonicalReceiptMessage(event: LabEvent): string {
     event.outcome.judge?.model ?? "-",
     event.outcome.judge?.version ?? "-",
     event.outcome.judge?.criteria_hash ?? "-",
+    judgeAttestation?.issuer ?? "-",
+    judgeAttestation?.key_id ?? "-",
+    judgeAttestation?.algorithm ?? "-",
+    judgeAttestation?.signed_at ?? "-",
+    judgeAttestation?.signature ?? "-",
     event.receipt.issuer,
     event.receipt.key_id,
     event.receipt.algorithm,
     event.receipt.signed_at,
     event.receipt.evidence_hash,
   ].join("\n");
+}
+
+export function canonicalJudgeMessage(event: LabEvent): string {
+  const judge = event.outcome.judge;
+  const attestation = judge?.attestation;
+  return [
+    "batuta-judge-v1",
+    event.event_id,
+    event.run_id,
+    event.project,
+    String(event.order),
+    event.tool,
+    event.model,
+    event.skill ?? "-",
+    event.routing.arm,
+    String(event.routing.holdout_declared),
+    String(event.cost.amount),
+    event.cost.currency,
+    event.outcome.status,
+    event.outcome.authority,
+    judge?.model ?? "-",
+    judge?.version ?? "-",
+    judge?.criteria_hash ?? "-",
+    attestation?.issuer ?? "-",
+    attestation?.key_id ?? "-",
+    attestation?.algorithm ?? "-",
+    attestation?.signed_at ?? "-",
+    event.receipt.evidence_hash,
+  ].join("\n");
+}
+
+export async function verifyJudgeAttestation(
+  event: LabEvent,
+  judgePublicKeys: string | undefined,
+  runnerPublicKeys: string | undefined,
+): Promise<boolean> {
+  const judge = event.outcome.judge;
+  const attestation = judge?.attestation;
+  if (!judge || !attestation || !matches(event.outcome.status, ["passed", "failed"])) return false;
+  if (judge.model === event.model || attestation.key_id === event.receipt.key_id) return false;
+  const judgeBytes = publicKeyBytes(attestation.key_id, judgePublicKeys);
+  const runnerBytes = publicKeyBytes(event.receipt.key_id, runnerPublicKeys);
+  if (!judgeBytes || !runnerBytes || Buffer.from(judgeBytes).equals(Buffer.from(runnerBytes))) return false;
+  const key = await importPublicKey(attestation.key_id, judgePublicKeys);
+  const signature = decodeBase64(attestation.signature);
+  if (!key || !signature) return false;
+  return crypto.subtle.verify(
+    "Ed25519",
+    key,
+    signature,
+    new TextEncoder().encode(canonicalJudgeMessage(event)),
+  );
 }
 
 export async function verifyReceipt(event: LabEvent, publicKeys: string | undefined): Promise<boolean> {

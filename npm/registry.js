@@ -29,6 +29,57 @@ function appDir() {
   return path.join(process.env.HOME || process.env.USERPROFILE || os.homedir(), ".batuta");
 }
 
+function validateAppDir(directory) {
+  if (process.platform === "win32") throw new Error("owner-only state ACLs are not implemented on Windows");
+  const resolved = path.resolve(directory);
+  const root = path.parse(resolved).root;
+  const dangerous = new Set([root, path.resolve(process.cwd()), path.resolve(os.tmpdir()), path.resolve(os.homedir())]);
+  if (!directory || dangerous.has(resolved)) throw new Error("BATUTA_HOME must name a dedicated state directory");
+  let current = root;
+  for (const component of path.relative(root, resolved).split(path.sep).filter(Boolean)) {
+    current = path.join(current, component);
+    let ancestor;
+    try {
+      ancestor = fs.lstatSync(current);
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    if (ancestor.isSymbolicLink() || !ancestor.isDirectory()) {
+      throw new Error("BATUTA_HOME and its ancestors must be real directories, not symlinks");
+    }
+  }
+  if (fs.existsSync(resolved)) {
+    const metadata = fs.lstatSync(resolved);
+    if (metadata.isSymbolicLink() || !metadata.isDirectory()) throw new Error("BATUTA_HOME must be a real directory, not a symlink");
+    const explicitlyConfigured = Boolean(process.env.BATUTA_HOME || process.env.BATUTA_CASA);
+    if (process.platform !== "win32" && explicitlyConfigured && (metadata.mode & 0o077) !== 0) {
+      throw new Error("existing BATUTA_HOME must already be owner-only (chmod 700)");
+    }
+  }
+  return resolved;
+}
+
+function ensureAppDir(directory) {
+  const resolved = validateAppDir(directory);
+  const root = path.parse(resolved).root;
+  let current = root;
+  for (const component of path.relative(root, resolved).split(path.sep).filter(Boolean)) {
+    current = path.join(current, component);
+    try {
+      fs.mkdirSync(current, { mode: 0o700 });
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    const metadata = fs.lstatSync(current);
+    if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+      throw new Error("BATUTA_HOME and its ancestors must remain real directories, not symlinks");
+    }
+  }
+  fs.chmodSync(resolved, 0o700);
+  return resolved;
+}
+
 function help() {
   return (
     "batuta registry — the public skill registry\n\n" +
@@ -81,7 +132,14 @@ function download(url, hops) {
 }
 
 async function update() {
-  const destination = path.join(appDir(), "registry.json");
+  let directory;
+  try {
+    directory = validateAppDir(appDir());
+  } catch (e) {
+    process.stderr.write("\n  batuta registry: unsafe state directory: " + e.message + "\n\n");
+    return 1;
+  }
+  const destination = path.join(directory, "registry.json");
   process.stdout.write("  downloading " + SOURCE + "\n");
 
   let body;
@@ -102,8 +160,7 @@ async function update() {
 
   let temporary;
   try {
-    fs.mkdirSync(appDir(), { recursive: true, mode: 0o700 });
-    if (process.platform !== "win32") fs.chmodSync(appDir(), 0o700);
+    ensureAppDir(directory);
     temporary = destination + ".tmp-" + process.pid + "-" + Date.now();
     const descriptor = fs.openSync(temporary, "wx", 0o600);
     try {
@@ -139,6 +196,6 @@ function run(args) {
   process.exit(2);
 }
 
-module.exports = { run: run, appDir: appDir, download: download };
+module.exports = { run: run, appDir: appDir, validateAppDir: validateAppDir, ensureAppDir: ensureAppDir, download: download };
 
 if (require.main === module) run(process.argv.slice(2));

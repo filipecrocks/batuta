@@ -1,7 +1,111 @@
 -- Authenticated, replay-safe ingestion and the LAB -> Batuta event contract.
--- PostgreSQL 16 / Neon. Safe to re-run. No table is dropped or rewritten.
+-- PostgreSQL 17 / Neon. Safe to re-run. The only destructive change is the
+-- deliberate removal of an obsolete arena contact field (data minimization).
 
 begin;
+
+-- The public arena no longer collects contact details. Purge legacy personal
+-- data rather than retaining it without a product purpose.
+alter table batuta.tasks drop column if exists contact;
+alter table batuta.tasks add column if not exists submission_key text;
+alter table batuta.tasks add column if not exists submission_hash text;
+create unique index if not exists tasks_submission_key_unique
+  on batuta.tasks (submission_key) where submission_key is not null;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'tasks_submission_identity_ck'
+      and conrelid = 'batuta.tasks'::regclass
+  ) then
+    alter table batuta.tasks add constraint tasks_submission_identity_ck check (
+      (submission_key is null and submission_hash is null)
+      or (submission_key ~ '^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{7,159}$'
+        and submission_hash ~ '^[0-9a-f]{64}$')
+    ) not valid;
+  end if;
+end $$;
+
+create table if not exists batuta.arena_rate_windows (
+  window_started timestamptz primary key,
+  request_count integer not null check (request_count >= 1)
+);
+
+create or replace function batuta.submit_arena_task(
+  p_idempotency_key text,
+  p_request_hash text,
+  p_statement text,
+  p_category text,
+  p_limit_per_minute integer default 20
+)
+returns table (submission_status text, task_id bigint)
+language plpgsql
+as $$
+declare
+  v_window timestamptz := date_trunc('minute', clock_timestamp());
+  v_count integer;
+  v_existing batuta.tasks%rowtype;
+begin
+  if p_idempotency_key !~ '^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{7,159}$'
+     or p_request_hash !~ '^[0-9a-f]{64}$'
+     or length(p_statement) < 20 or length(p_statement) > 4000
+     or p_category not in ('code','writing','data','documents','research','automation')
+     or p_limit_per_minute < 1 or p_limit_per_minute > 1000 then
+    raise exception 'invalid arena submission contract';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('arena:' || p_idempotency_key, 0));
+  select * into v_existing from batuta.tasks where submission_key = p_idempotency_key;
+  if found then
+    if v_existing.submission_hash = p_request_hash then
+      return query select 'replay'::text, v_existing.id;
+    else
+      return query select 'conflict'::text, null::bigint;
+    end if;
+    return;
+  end if;
+
+  delete from batuta.arena_rate_windows where window_started < v_window - interval '10 minutes';
+  insert into batuta.arena_rate_windows (window_started, request_count)
+  values (v_window, 1)
+  on conflict (window_started) do update
+    set request_count = batuta.arena_rate_windows.request_count + 1
+  returning request_count into v_count;
+  if v_count > p_limit_per_minute then
+    return query select 'rate_limited'::text, null::bigint;
+    return;
+  end if;
+
+  insert into batuta.tasks (
+    original_statement, canonical_statement, category, status, source,
+    submission_key, submission_hash
+  ) values (
+    p_statement, null, p_category, 'screening', 'public',
+    p_idempotency_key, p_request_hash
+  ) returning id into task_id;
+  submission_status := 'accepted';
+  return next;
+end;
+$$;
+
+-- Daily identifiers must be provisioned to exactly one aggregate signer. The
+-- API never self-enrolls a caller, preventing one allowlisted key from claiming
+-- or overwriting another installation's stable identity.
+create table if not exists batuta.daily_installation_enrollments (
+  installation_id text primary key,
+  signer_key_id text not null,
+  enrolled_at timestamptz not null default clock_timestamp(),
+  constraint daily_installation_enrollment_id_ck check (
+    installation_id ~ '^[0-9a-f]{16}$'
+    and signer_key_id ~ '^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,127}$'
+  )
+);
+create unique index if not exists daily_installation_signer_key
+  on batuta.daily_installation_enrollments (signer_key_id, installation_id);
+
+-- Widen the derived money column before combining bounded client summaries and
+-- trusted LAB events. This is lossless and prevents aggregate overflow.
+alter table batuta.skill_day_metrics alter column cost_usd type numeric using cost_usd::numeric;
 
 create table if not exists batuta.ingest_idempotency (
   signer_key_id   text        not null,
@@ -60,11 +164,35 @@ declare
   v_now timestamptz := clock_timestamp();
   v_window timestamptz := date_trunc('minute', v_now);
   v_count integer;
-  v_inserted boolean := false;
   v_existing batuta.ingest_idempotency%rowtype;
 begin
   if p_limit_per_minute < 1 or p_limit_per_minute > 10000 then
     raise exception 'invalid ingest rate limit';
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended(p_signer_key_id || ':' || p_idempotency_key, 0)
+  );
+
+  select * into v_existing
+  from batuta.ingest_idempotency
+  where signer_key_id = p_signer_key_id
+    and idempotency_key = p_idempotency_key;
+
+  -- A completed replay is a read of the cached result, not new work, and must
+  -- remain replayable even after the caller's new-request quota is exhausted.
+  if found then
+    if v_existing.request_kind <> p_request_kind or v_existing.request_hash <> p_request_hash then
+      return query select 'conflict'::text, null::jsonb, 409;
+      return;
+    elsif v_existing.status = 'succeeded' then
+      return query select 'replay'::text, v_existing.response_body, v_existing.http_status;
+      return;
+    elsif v_existing.status = 'in_progress'
+       and v_existing.updated_at >= v_now - interval '5 minutes' then
+      return query select 'in_progress'::text, null::jsonb, 409;
+      return;
+    end if;
   end if;
 
   delete from batuta.ingest_rate_windows
@@ -82,37 +210,18 @@ begin
     return;
   end if;
 
-  perform pg_advisory_xact_lock(
-    hashtextextended(p_signer_key_id || ':' || p_idempotency_key, 0)
-  );
-
-  insert into batuta.ingest_idempotency (
-    signer_key_id, idempotency_key, request_kind, request_hash
-  ) values (
-    p_signer_key_id, p_idempotency_key, p_request_kind, p_request_hash
-  )
-  on conflict do nothing
-  returning true into v_inserted;
-
-  select * into strict v_existing
-  from batuta.ingest_idempotency
-  where signer_key_id = p_signer_key_id
-    and idempotency_key = p_idempotency_key;
-
-  if v_inserted then
-    return query select 'accepted'::text, null::jsonb, 202;
-  elsif v_existing.request_kind <> p_request_kind or v_existing.request_hash <> p_request_hash then
-    return query select 'conflict'::text, null::jsonb, 409;
-  elsif v_existing.status = 'succeeded' then
-    return query select 'replay'::text, v_existing.response_body, v_existing.http_status;
-  elsif v_existing.status = 'failed'
-     or v_existing.updated_at < v_now - interval '5 minutes' then
+  if v_existing.signer_key_id is not null then
     update batuta.ingest_idempotency
     set status = 'in_progress', response_body = null, http_status = null, updated_at = v_now
     where signer_key_id = p_signer_key_id and idempotency_key = p_idempotency_key;
     return query select 'accepted'::text, null::jsonb, 202;
   else
-    return query select 'in_progress'::text, null::jsonb, 409;
+    insert into batuta.ingest_idempotency (
+      signer_key_id, idempotency_key, request_kind, request_hash
+    ) values (
+      p_signer_key_id, p_idempotency_key, p_request_kind, p_request_hash
+    );
+    return query select 'accepted'::text, null::jsonb, 202;
   end if;
 end;
 $$;
@@ -196,6 +305,19 @@ begin
 end;
 $$;
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'daily_summaries_private_payload_ck'
+      and conrelid = 'batuta.daily_summaries'::regclass
+  ) then
+    alter table batuta.daily_summaries
+      add constraint daily_summaries_private_payload_ck
+      check (not batuta.jsonb_has_private_key(payload)) not valid;
+  end if;
+end $$;
+
 create table if not exists batuta.lab_events (
   event_id             uuid        primary key,
   run_id               text        not null,
@@ -204,12 +326,18 @@ create table if not exists batuta.lab_events (
   tool                 text        not null,
   model                text        not null,
   skill                text,
+  routing_arm          text        not null default 'unassigned',
+  holdout_declared     boolean     not null default false,
   cost_usd             numeric(18,8) not null,
   outcome_status       text        not null,
   outcome_authority    text        not null,
   judge_model          text,
   judge_version        text,
   judge_criteria_hash  text,
+  judge_issuer         text,
+  judge_key_id         text,
+  judge_signed_at      timestamptz,
+  judge_signature      text,
   runner_receipt       jsonb       not null,
   signer_key_id        text        not null,
   signed_request_at    timestamptz not null,
@@ -217,7 +345,6 @@ create table if not exists batuta.lab_events (
   request_hash         text        not null,
   payload              jsonb       not null,
   observed_at          timestamptz not null default clock_timestamp(),
-  unique (run_id, event_order),
   constraint lab_events_order_ck check (event_order >= 0),
   constraint lab_events_identifier_ck check (
     run_id ~ '^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,127}$'
@@ -227,6 +354,10 @@ create table if not exists batuta.lab_events (
     and (skill is null or skill ~ '^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,127}$')
   ),
   constraint lab_events_cost_ck check (cost_usd >= 0 and cost_usd <= 1000000),
+  constraint lab_events_routing_ck check (
+    routing_arm in ('treatment', 'holdout', 'unassigned')
+    and (routing_arm <> 'holdout' or holdout_declared)
+  ),
   constraint lab_events_outcome_ck check (
     (outcome_status = 'unknown' and outcome_authority = 'runtime_observation'
       and judge_model is null and judge_version is null and judge_criteria_hash is null)
@@ -253,6 +384,69 @@ comment on column batuta.lab_events.payload is
 comment on column batuta.lab_events.runner_receipt is
   'Detached Ed25519 evidence receipt issued by the trusted runner. Batuta stores and verifies it; Batuta does not issue it.';
 
+-- Upgrade installations that applied an earlier revision of this migration.
+alter table batuta.lab_events add column if not exists judge_issuer text;
+alter table batuta.lab_events add column if not exists judge_key_id text;
+alter table batuta.lab_events add column if not exists judge_signed_at timestamptz;
+alter table batuta.lab_events add column if not exists judge_signature text;
+alter table batuta.lab_events add column if not exists routing_arm text not null default 'unassigned';
+alter table batuta.lab_events add column if not exists holdout_declared boolean not null default false;
+alter table batuta.lab_events drop constraint if exists lab_events_run_id_event_order_key;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'lab_events_runner_project_run_order_key'
+      and conrelid = 'batuta.lab_events'::regclass
+  ) then
+    alter table batuta.lab_events
+      add constraint lab_events_runner_project_run_order_key
+      unique (signer_key_id, project, run_id, event_order);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'lab_events_judge_attestation_ck'
+      and conrelid = 'batuta.lab_events'::regclass
+  ) then
+    alter table batuta.lab_events
+      add constraint lab_events_judge_attestation_ck check (
+        (outcome_status = 'unknown'
+          and judge_issuer is null and judge_key_id is null
+          and judge_signed_at is null and judge_signature is null)
+        or
+        (outcome_status in ('passed', 'failed')
+          and judge_issuer ~ '^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,127}$'
+          and judge_key_id ~ '^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,127}$'
+          and judge_key_id <> signer_key_id
+          and judge_signed_at is not null
+          and length(coalesce(judge_signature, '')) between 80 and 128)
+      ) not valid;
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'lab_events_routing_v1_ck'
+      and conrelid = 'batuta.lab_events'::regclass
+  ) then
+    alter table batuta.lab_events
+      add constraint lab_events_routing_v1_ck check (
+        routing_arm in ('treatment', 'holdout', 'unassigned')
+        and (routing_arm <> 'holdout' or holdout_declared)
+      ) not valid;
+  end if;
+end $$;
+
+comment on column batuta.lab_events.judge_signature is
+  'Detached Ed25519 verdict attestation verified under the separate BATUTA_JUDGE_PUBLIC_KEYS role before insertion.';
+
 create index if not exists lab_events_run_idx
   on batuta.lab_events (run_id, event_order);
 create index if not exists lab_events_project_observed_idx
@@ -264,21 +458,60 @@ create index if not exists lab_events_skill_idx
 
 create or replace view batuta.lab_event_metrics as
 select
-  date_trunc('day', observed_at)::date as date,
+  (observed_at at time zone 'UTC')::date as date,
   project,
   tool,
   model,
   skill,
   count(*)::bigint as events,
-  count(*) filter (where outcome_status = 'passed')::bigint as passed,
-  count(*) filter (where outcome_status = 'failed')::bigint as failed,
+  count(*) filter (where outcome_status = 'passed' and judge_key_id is not null)::bigint as passed,
+  count(*) filter (where outcome_status = 'failed' and judge_key_id is not null)::bigint as failed,
   count(*) filter (where outcome_status = 'unknown')::bigint as unknown,
-  sum(cost_usd)::numeric(18,8) as cost_usd
+  sum(cost_usd) as cost_usd,
+  routing_arm,
+  holdout_declared,
+  count(distinct signer_key_id)::integer as trusted_runners
 from batuta.lab_events
-group by date_trunc('day', observed_at)::date, project, tool, model, skill;
+group by (observed_at at time zone 'UTC')::date, project, tool, model, skill,
+  routing_arm, holdout_declared;
 
 comment on view batuta.lab_event_metrics is
   'Aggregate LAB telemetry without run_id, event_id, order, signatures, or receipt details.';
+
+create or replace view batuta.lab_arm_metrics as
+select
+  (observed_at at time zone 'UTC')::date as date,
+  project,
+  model,
+  routing_arm,
+  count(*)::bigint as events,
+  count(*) filter (where outcome_status in ('passed', 'failed') and judge_key_id is not null)::bigint as judged,
+  count(*) filter (where outcome_status = 'passed' and judge_key_id is not null)::bigint as passed,
+  sum(cost_usd) as cost_usd,
+  count(distinct signer_key_id)::integer as trusted_runners
+from batuta.lab_events
+where routing_arm in ('treatment', 'holdout') and holdout_declared
+group by (observed_at at time zone 'UTC')::date, project, model, routing_arm;
+
+comment on view batuta.lab_arm_metrics is
+  'Descriptive receipt-backed arm aggregate. It is not causal: assignment is not preregistered or independently signed.';
+
+create or replace view batuta.lab_skill_day_metrics as
+select
+  (observed_at at time zone 'UTC')::date as date,
+  skill,
+  count(*)::bigint as routes,
+  count(*)::bigint as activations,
+  count(*) filter (where outcome_status in ('passed', 'failed') and judge_key_id is not null)::bigint as turns_judged,
+  count(*) filter (where outcome_status = 'passed' and judge_key_id is not null)::bigint as turns_ok,
+  sum(cost_usd) as cost_usd,
+  count(distinct signer_key_id)::integer as trusted_runners
+from batuta.lab_events
+where skill is not null
+group by (observed_at at time zone 'UTC')::date, skill;
+
+comment on view batuta.lab_skill_day_metrics is
+  'Receipt-backed skill/day metrics consumed by ranking; contains no event, run, signature, or receipt identifiers.';
 
 -- v2 and both v1 wire formats remain readable during the compatibility window.
 -- Recalculation is whole-day and idempotent.
@@ -326,14 +559,14 @@ begin
   select
     skill,
     p_day,
-    sum(routes)::bigint,
-    sum(activations)::bigint,
-    sum(user_activations)::bigint,
-    sum(judged_turns)::bigint,
-    sum(successful_turns)::bigint,
-    sum(reprompts)::bigint,
-    sum(errors)::bigint,
-    sum(retries)::bigint,
+    least(sum(routes), 9223372036854775807)::bigint,
+    least(sum(activations), 9223372036854775807)::bigint,
+    least(sum(user_activations), 9223372036854775807)::bigint,
+    least(sum(judged_turns), 9223372036854775807)::bigint,
+    least(sum(successful_turns), 9223372036854775807)::bigint,
+    least(sum(reprompts), 9223372036854775807)::bigint,
+    least(sum(errors), 9223372036854775807)::bigint,
+    least(sum(retries), 9223372036854775807)::bigint,
     sum(tokens_in),
     sum(tokens_out),
     sum(cost_usd),
@@ -348,11 +581,68 @@ begin
 end;
 $$;
 
+-- Enrollment authorization and all daily writes share one PostgreSQL
+-- transaction. The row lock makes revocation linearizable with ingestion: a
+-- revocation that commits first wins; one that starts later waits for this
+-- already-authorized write to finish.
+create or replace function batuta.store_daily_summary(
+  p_installation_id text,
+  p_signer_key_id text,
+  p_day date,
+  p_batuta_version text,
+  p_mode text,
+  p_payload jsonb,
+  p_request_hash text
+)
+returns table(store_status text, rows_recalculated integer)
+language plpgsql
+as $$
+begin
+  perform 1
+  from batuta.daily_installation_enrollments
+  where installation_id = p_installation_id
+    and signer_key_id = p_signer_key_id
+  for key share;
+
+  if not found then
+    store_status := 'not_enrolled';
+    rows_recalculated := 0;
+    return next;
+    return;
+  end if;
+
+  insert into batuta.installations (id, batuta_version, mode)
+  values (p_installation_id, p_batuta_version, p_mode)
+  on conflict (id) do update set
+    last_seen = now(),
+    batuta_version = excluded.batuta_version,
+    mode = excluded.mode;
+
+  insert into batuta.daily_summaries (installation_id, day, payload, hash)
+  values (p_installation_id, p_day, p_payload, p_request_hash)
+  on conflict (installation_id, day) do update set
+    payload = excluded.payload,
+    hash = excluded.hash,
+    received_at = now();
+
+  store_status := 'accepted';
+  rows_recalculated := batuta.recalculate_day_metrics(p_day);
+  return next;
+end;
+$$;
+
 revoke all on batuta.ingest_idempotency from public;
 revoke all on batuta.ingest_rate_windows from public;
+revoke all on batuta.arena_rate_windows from public;
+revoke all on batuta.daily_installation_enrollments from public;
 revoke all on batuta.lab_events from public;
+revoke all on batuta.lab_event_metrics from public;
+revoke all on batuta.lab_arm_metrics from public;
+revoke all on batuta.lab_skill_day_metrics from public;
 revoke all on function batuta.claim_ingest_request(text, text, text, text, integer) from public;
 revoke all on function batuta.complete_ingest_request(text, text, text, jsonb, integer) from public;
 revoke all on function batuta.fail_ingest_request(text, text, text) from public;
+revoke all on function batuta.submit_arena_task(text, text, text, text, integer) from public;
+revoke all on function batuta.store_daily_summary(text, text, date, text, text, jsonb, text) from public;
 
 commit;

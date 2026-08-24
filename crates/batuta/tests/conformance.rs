@@ -8,7 +8,7 @@
 //!   cargo test -- --test-threads=1
 
 use batuta::json::Value;
-use batuta::{bm25, home, index, json, record, route, sha256, storage, text};
+use batuta::{bm25, home, index, json, lifecycle, record, route, sha256, storage, text};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
@@ -21,6 +21,11 @@ fn test_home() -> PathBuf {
     SETUP.call_once(|| {
         let _ = fs::remove_dir_all(&base);
         let _ = fs::create_dir_all(&base);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&base, fs::Permissions::from_mode(0o700)).unwrap();
+        }
         std::env::set_var("BATUTA_HOME", &base);
     });
     base
@@ -450,6 +455,13 @@ fn c15_hot_path_fits_the_budget() {
         idx.skills.len()
     );
     let raw = index::write(&idx);
+    storage::atomic_write(&home::ensure_dir().join("index.txt"), raw.as_bytes(), 0o600).unwrap();
+    home::write_config(&home::Config {
+        holdout_pct: 0,
+        informed: true,
+        ..home::Config::default()
+    })
+    .unwrap();
 
     let queries: Vec<String> = (0..50)
         .map(|i| format!("preciso limpar planilha bagunçada e gerar relatorio {i}"))
@@ -461,18 +473,34 @@ fn c15_hot_path_fits_the_budget() {
         let idx = index::read_partial(&raw, &terms);
         let _ = bm25::score(&idx, &terms);
     }
-    let total = t0.elapsed().as_micros() as f64 / 1000.0;
-    let per_route = total / 50.0;
+    let algorithm_total = t0.elapsed().as_micros() as f64 / 1000.0;
+    let algorithm_ms = algorithm_total / queries.len() as f64;
+
+    let operational_started = std::time::Instant::now();
+    for (sequence, query) in queries.iter().take(20).enumerate() {
+        let output = route::route(query, "hook", None, "benchmark");
+        lifecycle::begin_turn(
+            &json::object(vec![(
+                "session_id",
+                json::text(format!("benchmark-session-{sequence}")),
+            )]),
+            &output,
+        )
+        .unwrap();
+        route::log_event(&output).unwrap();
+    }
+    let operational_ms = operational_started.elapsed().as_secs_f64() * 1000.0 / 20.0;
 
     assert!(
-        per_route < 50.0,
-        "{per_route:.1}ms per route with {} skills — blew the budget's slack",
+        operational_ms < 50.0,
+        "{operational_ms:.1}ms per operational route with {} skills — blew the budget's slack",
         idx.skills.len()
     );
     eprintln!(
-        "  [measured] {} skills · {:.2}ms per route · {} KB index",
+        "  [measured] {} skills · {:.2}ms algorithm · {:.2}ms operational route · {} KB index",
         idx.skills.len(),
-        per_route,
+        algorithm_ms,
+        operational_ms,
         raw.len() / 1024
     );
 }

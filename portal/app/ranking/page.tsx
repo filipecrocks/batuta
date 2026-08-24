@@ -24,7 +24,7 @@ export default async function Ranking() {
         <h1>Ranking</h1>
         <p className="linha-fina">
           Quantas vezes a skill foi sugerida, quantas vezes ela realmente disparou, e
-          quanto custou cada tarefa que terminou bem.
+          quais desfechos e custos têm recibos LAB verificados.
         </p>
 
         <div className="aviso">
@@ -37,6 +37,13 @@ export default async function Ranking() {
             projeto acusa nos outros.
           </p>
         </div>
+
+        <p className="miudo">
+          Rotas, ativações e instalações vêm dos agregados locais provisionados. Desfechos
+          e custos vêm de uma população LAB separada, com recibo do runner e juiz
+          independente; juntar por nome da skill não transforma essas populações em um
+          único experimento nem prova causalidade.
+        </p>
 
         {linhas.length === 0 ? (
           <div className="vazio-de-verdade">

@@ -10,13 +10,14 @@
 
 set -eu
 
-command -v batuta >/dev/null 2>&1 || exit 0
+BATUTA_EXECUTABLE=__BATUTA_EXECUTABLE__
+[ -x "$BATUTA_EXECUTABLE" ] || exit 0
 
 # 300ms is the hard ceiling. If the machine is on its knees, better to stay quiet.
 if command -v timeout >/dev/null 2>&1; then
-  timeout 0.3 batuta route --stdin-json --mode hook 2>/dev/null || exit 0
+  timeout 0.3 "$BATUTA_EXECUTABLE" route --stdin-json --mode hook 2>/dev/null || exit 0
 else
-  batuta route --stdin-json --mode hook 2>/dev/null || exit 0
+  "$BATUTA_EXECUTABLE" route --stdin-json --mode hook 2>/dev/null || exit 0
 fi
 
 exit 0
