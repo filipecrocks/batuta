@@ -13,6 +13,18 @@ test("the public home exposes Portuguese, English and Spanish", () => {
   assert.match(read("components/SiteChrome.tsx"), /aria-label=.*language/i);
 });
 
+test("all visible home section labels come from localized copy", () => {
+  const home = read("components/HomeContent.tsx");
+  for (const field of ["glossaryLabel", "localLabel", "privacyLink", "publicLabel"]) {
+    assert.match(home, new RegExp(`${field}:\\s*\"`, "g"));
+    assert.match(home, new RegExp(`c\\.${field}`));
+  }
+  assert.doesNotMatch(home, />Glossary</);
+  assert.doesNotMatch(home, />Local first</);
+  assert.doesNotMatch(home, />Privacy by design/);
+  assert.doesNotMatch(home, />Public good</);
+});
+
 test("the layout uses a friendly non-condensed display face", () => {
   const layout = read("app/layout.tsx");
   const css = read("app/globals.css");
