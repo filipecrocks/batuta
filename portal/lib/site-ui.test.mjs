@@ -28,3 +28,14 @@ test("the page contract forbids viewport-level horizontal overflow", () => {
   assert.match(css, /min-width:\s*0/);
   assert.doesNotMatch(css, /\.topo nav\s*\{[^}]*overflow-x:\s*auto/s);
 });
+
+test("mobile navigation and language controls meet the 44px touch floor", () => {
+  const css = read("app/globals.css");
+  assert.match(css, /\.language-switch button\s*\{[^}]*min-(?:block-size|height):\s*44px/s);
+  assert.match(css, /\.topo nav a\s*\{[^}]*min-(?:block-size|height):\s*44px/s);
+});
+
+test("callouts do not use decorative thick side-tab borders", () => {
+  const css = read("app/globals.css");
+  assert.doesNotMatch(css, /border-(?:left|right):\s*(?:[2-9]|\d{2,})px\s+solid/);
+});

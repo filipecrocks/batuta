@@ -47,7 +47,7 @@ export function HomeContent({ skillsMeasured }: { skillsMeasured: number }) {
   return <div lang={locale === "pt" ? "pt-BR" : locale}>
     <section className="faixa chamada"><div className="centro home-wide">
       <div className="language-switch" role="group" aria-label="Choose language / Escolher idioma">
-        {(["pt", "en", "es"] as Locale[]).map((item) => <button key={item} onClick={() => setLocale(item)} aria-pressed={locale === item}>{item.toUpperCase()}</button>)}
+        {(["pt", "en", "es"] as Locale[]).map((item) => <button key={item} onClick={() => setLocale(item)} aria-pressed={locale === item}>{{ pt: "Português", en: "English", es: "Español" }[item]}</button>)}
       </div>
       <div className="chamada-grade"><div className="hero-copy"><p className="olho">{c.label}</p><h1>{c.title}</h1><p className="linha-fina">{c.lead}</p><div className="botoes"><a className="botao botao-forte" href="/instalar">{c.install}</a><a className="botao" href="#como-funciona">{c.learn}</a></div></div><Mostrador /></div>
     </div></section>
@@ -55,8 +55,8 @@ export function HomeContent({ skillsMeasured }: { skillsMeasured: number }) {
       <p className="section-kicker">{c.proof}</p>
       <div className="placar placar-wide"><div><b className={skillsMeasured ? "" : "vazio"}>{skillsMeasured}</b><span>skills measured</span></div><div><b className="vazio">0</b><span>published recipes</span></div><div><b>24</b><span>frozen benchmark tasks</span></div><div><b>&lt;50ms</b><span>local routing budget</span></div></div>
       <aside className="truth-band"><strong>{c.honest}</strong><p>{c.honestBody}</p></aside>
-      <div className="content-split" id="como-funciona"><div><p className="section-kicker">01 — {c.how}</p><h2>{c.how}</h2></div><div className="steps">{c.steps.map(([title, body], index) => <article key={title}><span>0{index + 1}</span><h3>{title}</h3><p>{body}</p></article>)}</div></div>
-      <div className="statement-grid"><article><p className="section-kicker">02 — Local first</p><h2>{c.today}</h2><p>{c.todayBody}</p><a href="/privacidade">Privacy by design →</a></article><article className="mission"><p className="section-kicker">03 — Public good</p><h2>{c.mission}</h2><p>{c.missionBody}</p><a className="botao" href="/manifesto">{c.manifest}</a></article></div>
+      <div className="content-split" id="como-funciona"><div><h2>{c.how}</h2></div><div className="steps">{c.steps.map(([title, body], index) => <article key={title}><span>0{index + 1}</span><h3>{title}</h3><p>{body}</p></article>)}</div></div>
+      <div className="statement-grid"><article><p className="section-kicker">Local first</p><h2>{c.today}</h2><p>{c.todayBody}</p><a href="/privacidade">Privacy by design →</a></article><article className="mission"><p className="section-kicker">Public good</p><h2>{c.mission}</h2><p>{c.missionBody}</p><a className="botao" href="/manifesto">{c.manifest}</a></article></div>
     </div></section>
   </div>;
 }

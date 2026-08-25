@@ -169,6 +169,9 @@ main { flex: 1; }
 }
 .topo nav::-webkit-scrollbar { display: none; }
 .topo nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   color: var(--texto-2);
   text-decoration: none;
   white-space: nowrap;
@@ -253,7 +256,7 @@ hr {
 blockquote {
   margin: 1.7em 0;
   padding: 0.1em 0 0.1em 1.3em;
-  border-left: 2px solid var(--acento);
+  border-left: 1px solid var(--acento);
   color: var(--texto-2);
   font-size: 1.02em;
 }
@@ -508,7 +511,7 @@ tbody tr:hover { background: var(--tinta-2); }
 
 .aviso {
   border: 1px solid var(--acento-sub);
-  border-left: 3px solid var(--acento);
+  border-left: 1px solid var(--acento);
   background: linear-gradient(180deg, color-mix(in srgb, var(--acento) 8%, var(--tinta-3)), var(--tinta-2));
   border-radius: var(--raio-p);
   padding: 1.15rem 1.35rem;
@@ -645,11 +648,12 @@ footer .selo {
   font: 600 0.68rem/1 var(--mono);
   letter-spacing: 0.08em;
   cursor: pointer;
+  min-height: 44px;
 }
 .language-switch button:hover { color: var(--texto); }
 .language-switch button[aria-pressed="true"] { color: var(--acento-alto); border-color: var(--acento); }
 .hero-copy { align-self: center; }
-.hero-copy h1 { max-width: 13ch; font-size: clamp(2.65rem, 6.4vw, 5.25rem); letter-spacing: -0.055em; }
+.hero-copy h1 { max-width: 13ch; font-size: clamp(2.65rem, 6.4vw, 5.25rem); letter-spacing: -0.04em; }
 .hero-copy .linha-fina { max-width: 39rem; }
 .home-body { padding-top: clamp(2rem, 6vw, 5rem); }
 .section-kicker {
