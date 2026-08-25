@@ -1,43 +1,19 @@
-/**
- * The hero display — the local report the way it comes out in the terminal.
- *
- * It's an EXAMPLE, and the caption says so plainly. Project law 11 ("measured
- * number, not estimated") applies to the site itself: no number in this box is
- * presented as a published result. What it shows is the SHAPE of the report — the
- * funnel, the ghost skill, the cost per completed task — which is the page's argument.
- */
+"use client";
+
+import { Locale, useLocale } from "./LocaleProvider";
+
+const COPY = {
+  pt: { aria: "Exemplo ilustrativo do formato do relatório local", label: "EXEMPLO · NÃO É RESULTADO PUBLICADO", routes: "rotas", activation: "disparo", cost: "custo/tarefa", ghost: "fantasma", quiet: "silêncio", caption: "Dados fictícios apenas para mostrar o formato. Resultados reais só aparecem no ranking com fonte e recibo." },
+  en: { aria: "Illustrative example of the local report format", label: "EXAMPLE · NOT A PUBLISHED RESULT", routes: "routes", activation: "activation", cost: "cost/task", ghost: "ghost", quiet: "quiet", caption: "Fictional data shown only to explain the format. Real results appear in the ranking with a source and receipt." },
+  es: { aria: "Ejemplo ilustrativo del formato del informe local", label: "EJEMPLO · NO ES UN RESULTADO PUBLICADO", routes: "rutas", activation: "activación", cost: "coste/tarea", ghost: "fantasma", quiet: "silencio", caption: "Datos ficticios usados solo para explicar el formato. Los resultados reales aparecen en el ranking con fuente y recibo." },
+} satisfies Record<Locale, Record<string, string>>;
+
 export function Mostrador() {
-  return (
-    <div className="leitor" aria-label="Exemplo do relatório local do Batuta">
-      <div className="leitor-topo">
-        <i />
-        <i />
-        <i />
-        <b>relatório local</b>
-      </div>
-      <pre>
-        <code>
-          <s>$</s> <u>batuta report --dias 30</u>
-          {"\n\n"}
-          <q>skill                  rotas  disparo  custo/tarefa</q>
-          {"\n"}
-          <q>─────────────────────────────────────────────────</q>
-          {"\n"}
-          <u>systematic-debugging</u>      58     0,79        $0,041{"\n"}
-          <u>test-driven-development</u>   31     0,61        $0,038{"\n"}
-          <u>ponytail</u>                  19     0,42        $0,052{"\n"}
-          <u>stop-slop</u>                 12     0,00   <s>fantasma</s>
-          {"\n"}
-          <q>─────────────────────────────────────────────────</q>
-          {"\n"}
-          silêncio em 41% dos turnos{"  ·  "}holdout 5%
-        </code>
-      </pre>
-      <p className="leitor-pe">
-        Exemplo da forma do relatório. Os números são de uma máquina de teste — o que
-        o Batuta publica só aparece depois de medido, no{" "}
-        <a href="/ranking">ranking</a>.
-      </p>
-    </div>
-  );
+  const { locale } = useLocale();
+  const c = COPY[locale];
+  return <figure className="leitor" aria-label={c.aria}>
+    <div className="leitor-topo"><i /><i /><i /><b>{c.label}</b></div>
+    <pre><code><s>$</s> <u>batuta report --days 30</u>{"\n\n"}<q>skill                 {c.routes}  {c.activation}  {c.cost}</q>{"\n"}<q>────────────────────────────────────────────</q>{"\n"}<u>debugging</u>              8      0.75      $0.04{"\n"}<u>testing</u>                6      0.66      $0.03{"\n"}<u>example-skill</u>          5      0.00      <s>{c.ghost}</s>{"\n"}<q>────────────────────────────────────────────</q>{"\n"}{c.quiet}: 38%  ·  holdout: 5%</code></pre>
+    <figcaption className="leitor-pe">{c.caption} <a href="/ranking">Ranking →</a></figcaption>
+  </figure>;
 }

@@ -10,7 +10,7 @@ test("the public home exposes Portuguese, English and Spanish", () => {
   for (const locale of ["pt", "en", "es"]) {
     assert.match(home, new RegExp(`${locale}:\\s*\\{`));
   }
-  assert.match(home, /aria-label=.*language/i);
+  assert.match(read("components/SiteChrome.tsx"), /aria-label=.*language/i);
 });
 
 test("the layout uses a friendly non-condensed display face", () => {
@@ -38,4 +38,30 @@ test("mobile navigation and language controls meet the 44px touch floor", () => 
 test("callouts do not use decorative thick side-tab borders", () => {
   const css = read("app/globals.css");
   assert.doesNotMatch(css, /border-(?:left|right):\s*(?:[2-9]|\d{2,})px\s+solid/);
+});
+
+test("locale is shared by the page chrome, content and document language", () => {
+  const provider = read("components/LocaleProvider.tsx");
+  const chrome = read("components/SiteChrome.tsx");
+  const home = read("components/HomeContent.tsx");
+  const display = read("components/Mostrador.tsx");
+  assert.match(provider, /localStorage\.setItem/);
+  assert.match(provider, /document\.documentElement\.lang/);
+  assert.match(chrome, /useLocale\(\)/);
+  assert.match(home, /useLocale\(\)/);
+  assert.match(display, /useLocale\(\)/);
+});
+
+test("published-looking measurements cite their source next to the number", () => {
+  const home = read("components/HomeContent.tsx");
+  assert.match(home, /metric-source/g);
+  assert.match(home, /bateria\/v1\/tarefas\.json/);
+  assert.match(home, /docs\/BENCHMARKS\.md/);
+});
+
+test("the terminal is explicitly labeled as an example in every language", () => {
+  const display = read("components/Mostrador.tsx");
+  assert.match(display, /not a published result/i);
+  assert.match(display, /não é resultado publicado/i);
+  assert.match(display, /no es un resultado publicado/i);
 });
