@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Manrope } from "next/font/google";
 import { Marca } from "../components/Marca";
 import "./globals.css";
 
@@ -8,12 +8,10 @@ import "./globals.css";
    - serif  for what ASSERTS (headings, the name)
    - sans   for what EXPLAINS (prose)
    - mono   for what MEASURES (number, label, command, hash) */
-const serif = Instrument_Serif({
+const display = Manrope({
   subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
   display: "swap",
-  variable: "--fonte-serif",
+  variable: "--fonte-display",
 });
 const sans = Inter({
   subsets: ["latin"],
@@ -78,7 +76,7 @@ export default function RaizLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="pt-BR"
-      className={`${serif.variable} ${sans.variable} ${mono.variable}`}
+      className={`${display.variable} ${sans.variable} ${mono.variable}`}
     >
       <body>
         <div className="casca">
